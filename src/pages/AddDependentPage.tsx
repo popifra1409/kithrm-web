@@ -75,7 +75,7 @@ export default function AddDependentPage() {
     }
 
     return (
-        <div className="max-w-2xl mx-auto p-8">
+        <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <h1 className="text-lg font-bold text-gray-900 mb-6">Déclarer un Ayant Droit</h1>
 
             <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
@@ -98,12 +98,12 @@ export default function AddDependentPage() {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Prénom(s)" value={firstName} onChange={setFirstName} />
                     <Field label="Nom *" value={lastName} onChange={setLastName} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Date de naissance * (AAAA-MM-JJ)" value={birthDate} onChange={setBirthDate} placeholder="2018-02-10" />
                     <Field label="Lieu de naissance" value={birthPlace} onChange={setBirthPlace} />
                 </div>

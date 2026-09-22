@@ -181,7 +181,7 @@ export default function CensusPage() {
     if (!draft) return null;
 
     return (
-        <div className="max-w-2xl mx-auto p-8">
+        <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <h1 className="text-lg font-bold text-[#1e3a5f]">{current.campaign.name}</h1>
             {current.campaign.description && <p className="text-sm text-gray-500 mt-1 mb-4">{current.campaign.description}</p>}
 
@@ -215,7 +215,7 @@ export default function CensusPage() {
                 ) : (
                     <div className="space-y-2">
                         {draft.dependents.map((dep, index) => (
-                            <div key={index} className={`bg-gray-50 rounded-lg p-3 flex items-center justify-between ${dep.removed ? 'opacity-50' : ''}`}>
+                            <div key={index} className={`bg-gray-50 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${dep.removed ? 'opacity-50' : ''}`}>
                                 <div>
                                     <p className={`text-sm font-semibold ${dep.removed ? 'line-through' : ''} text-gray-900`}>
                                         {dep.first_name} {dep.last_name}
@@ -256,7 +256,7 @@ export default function CensusPage() {
                 ) : (
                     <div className="space-y-2">
                         {draft.diplomas.map((dip, index) => (
-                            <div key={index} className={`bg-gray-50 rounded-lg p-3 flex items-center justify-between ${dip.removed ? 'opacity-50' : ''}`}>
+                            <div key={index} className={`bg-gray-50 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${dip.removed ? 'opacity-50' : ''}`}>
                                 <div>
                                     <p className={`text-sm font-semibold ${dip.removed ? 'line-through' : ''} text-gray-900`}>{dip.title}</p>
                                     <p className="text-xs text-gray-500">

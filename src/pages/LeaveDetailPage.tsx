@@ -38,7 +38,7 @@ export default function LeaveDetailPage() {
     }
 
     return (
-        <div className="max-w-2xl mx-auto p-8">
+        <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <div className="bg-white rounded-xl border border-gray-200 p-6 mb-4">
                 <h1 className="text-lg font-bold text-[#1e3a5f]">{leave.leave_type}</h1>
                 <p className="text-sm text-gray-700 mt-1">

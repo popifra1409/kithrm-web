@@ -117,7 +117,7 @@ export default function NewLeaveRequestPage() {
     }
 
     return (
-        <div className="max-w-2xl mx-auto p-8">
+        <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <h1 className="text-lg font-bold text-gray-900 mb-6">Nouvelle Demande de Congé</h1>
 
             <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
@@ -158,7 +158,7 @@ export default function NewLeaveRequestPage() {
                     ) : null}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field label="Date de début (1ère prise) *" value={startDate} onChange={setStartDate} placeholder="2026-07-01" />
                     <Field label="Date de fin (1ère prise) *" value={endDate} onChange={setEndDate} placeholder="2026-07-15" />
                 </div>
@@ -169,7 +169,7 @@ export default function NewLeaveRequestPage() {
                 </label>
 
                 {isSplit && (
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Date de début (2ème prise) *" value={startDate2} onChange={setStartDate2} placeholder="2026-09-01" />
                         <Field label="Date de fin (2ème prise) *" value={endDate2} onChange={setEndDate2} placeholder="2026-09-08" />
                     </div>
