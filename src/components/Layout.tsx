@@ -7,6 +7,7 @@ const navItems = [
     { to: '/leaves', label: 'Mes Congés', icon: '🏖️' },
     { to: '/dependents', label: 'Ayants Droit', icon: '👨‍👩‍👧' },
     { to: '/diplomas', label: 'Diplômes', icon: '🎓' },
+    { to: '/census', label: 'Recensement', icon: '📋' },
 ];
 
 export default function Layout() {

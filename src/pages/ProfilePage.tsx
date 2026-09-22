@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { fetchProfile, updateProfile, uploadProfilePhoto } from '../api/profile';
 import type { EmployeeProfile } from '../api/profile';
+import { changePassword } from '../api/auth';
 import { extractApiError } from '../api/client';
 
 export default function ProfilePage() {
@@ -16,6 +17,14 @@ export default function ProfilePage() {
     const [city, setCity] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [newPasswordConfirmation, setNewPasswordConfirmation] = useState('');
+    const [isSavingPassword, setIsSavingPassword] = useState(false);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
 
     useEffect(() => {
         load();
@@ -65,6 +74,43 @@ export default function ProfilePage() {
             setErrorMessage(extractApiError(error).message);
         } finally {
             setIsSaving(false);
+        }
+    }
+
+    async function handleChangePassword() {
+        setPasswordError(null);
+        setPasswordSuccess(false);
+
+        if (!currentPassword || !newPassword || !newPasswordConfirmation) {
+            setPasswordError('Veuillez remplir tous les champs.');
+            return;
+        }
+        if (newPassword !== newPasswordConfirmation) {
+            setPasswordError('Les deux nouveaux mots de passe ne correspondent pas.');
+            return;
+        }
+        if (newPassword.length < 8) {
+            setPasswordError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+            return;
+        }
+
+        setIsSavingPassword(true);
+
+        try {
+            await changePassword({
+                current_password: currentPassword,
+                password: newPassword,
+                password_confirmation: newPasswordConfirmation,
+            });
+            setPasswordSuccess(true);
+            setCurrentPassword('');
+            setNewPassword('');
+            setNewPasswordConfirmation('');
+            setIsChangingPassword(false);
+        } catch (error) {
+            setPasswordError(extractApiError(error).message);
+        } finally {
+            setIsSavingPassword(false);
         }
     }
 
@@ -167,6 +213,67 @@ export default function ProfilePage() {
                         <InfoRow label="Email" value={profile.email} />
                         <InfoRow label="Adresse" value={profile.address} />
                         <InfoRow label="Ville" value={profile.city} />
+                    </>
+                )}
+            </Section>
+
+            <Section
+                title="Sécurité"
+                action={
+                    !isChangingPassword && (
+                        <button
+                            onClick={() => {
+                                setIsChangingPassword(true);
+                                setPasswordSuccess(false);
+                            }}
+                            className="text-sm font-semibold text-[#1e3a5f] hover:underline"
+                        >
+                            Changer le mot de passe
+                        </button>
+                    )
+                }
+            >
+                {isChangingPassword ? (
+                    <div className="space-y-4">
+                        <Field label="Mot de passe actuel" value={currentPassword} onChange={setCurrentPassword} type="password" />
+                        <Field label="Nouveau mot de passe" value={newPassword} onChange={setNewPassword} type="password" />
+                        <Field
+                            label="Confirmer le nouveau mot de passe"
+                            value={newPasswordConfirmation}
+                            onChange={setNewPasswordConfirmation}
+                            type="password"
+                        />
+
+                        {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+
+                        <div className="flex gap-3 pt-2">
+                            <button
+                                onClick={() => {
+                                    setIsChangingPassword(false);
+                                    setCurrentPassword('');
+                                    setNewPassword('');
+                                    setNewPasswordConfirmation('');
+                                    setPasswordError(null);
+                                }}
+                                className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                Annuler
+                            </button>
+                            <button
+                                onClick={handleChangePassword}
+                                disabled={isSavingPassword}
+                                className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                            >
+                                {isSavingPassword ? 'Enregistrement...' : 'Confirmer'}
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <>
+                        {passwordSuccess && (
+                            <p className="text-sm text-green-700 mb-2">✅ Mot de passe modifié avec succès.</p>
+                        )}
+                        <p className="text-sm text-gray-500">••••••••</p>
                     </>
                 )}
             </Section>

@@ -13,6 +13,7 @@ import DependentsPage from './pages/DependentsPage';
 import AddDependentPage from './pages/AddDependentPage';
 import DiplomasPage from './pages/DiplomasPage';
 import AddDiplomaPage from './pages/AddDiplomaPage';
+import CensusPage from './pages/CensusPage';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             <Route path="/dependents/new" element={<AddDependentPage />} />
             <Route path="/diplomas" element={<DiplomasPage />} />
             <Route path="/diplomas/new" element={<AddDiplomaPage />} />
+            <Route path="/census" element={<CensusPage />} />
           </Route>
         </Routes>
       </AuthProvider>

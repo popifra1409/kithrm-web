@@ -48,3 +48,13 @@ export async function fetchMe(): Promise<AuthUser> {
 export async function logout(): Promise<void> {
   await apiClient.post('/auth/logout');
 }
+
+export interface ChangePasswordPayload {
+  current_password: string;
+  password: string;
+  password_confirmation: string;
+}
+
+export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
+  await apiClient.post('/auth/password', payload);
+}
