@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAppInfo } from '../context/AppInfoContext';
 import { extractApiError } from '../api/client';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { appInfo } = useAppInfo();
   const navigate = useNavigate();
 
   const [matricule, setMatricule] = useState('');
@@ -37,9 +39,16 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="text-center mb-6">
-          <div className="w-16 h-16 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
-            <span className="text-white text-2xl font-bold">H</span>
-          </div>
+          {appInfo?.logo_url ? (
+            <img src={appInfo.logo_url} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
+          ) : (
+            <div className="w-16 h-16 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
+              <span className="text-white text-2xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
+            </div>
+          )}
+          {appInfo?.hospital_name && (
+            <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
+          )}
           <h1 className="text-2xl font-bold text-[#1e3a5f]">Connexion</h1>
           <p className="text-sm text-gray-500 mt-1">Accédez à votre espace employé</p>
         </div>

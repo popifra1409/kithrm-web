@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useAppInfo } from '../context/AppInfoContext';
 import { extractApiError } from '../api/client';
 
 export default function ActivatePage() {
   const { activate } = useAuth();
+  const { appInfo } = useAppInfo();
   const navigate = useNavigate();
 
   const [matricule, setMatricule] = useState('');
@@ -58,9 +60,13 @@ export default function ActivatePage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
-            <span className="text-white text-xl font-bold">H</span>
-          </div>
+          {appInfo?.logo_url ? (
+            <img src={appInfo.logo_url} alt="" className="w-14 h-14 mx-auto mb-3 object-contain" />
+          ) : (
+            <div className="w-14 h-14 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
+              <span className="text-white text-xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
+            </div>
+          )}
           <h1 className="text-xl font-bold text-[#1e3a5f]">Activer mon compte</h1>
           <p className="text-xs text-gray-500 mt-2 leading-relaxed">
             Utilisez le matricule et le mot de passe temporaire communiqués par les Ressources
