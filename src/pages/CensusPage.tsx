@@ -45,11 +45,14 @@ const EMPTY_DIPLOMA: CensusDraftDiploma = {
   document: null,
 };
 
+type Step = 'edit' | 'review';
+
 export default function CensusPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
   const [draft, setDraft] = useState<CensusDraft | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<Step>('edit');
 
   const [editingDependentIndex, setEditingDependentIndex] = useState<number | null | 'new'>(null);
   const [editingDiplomaIndex, setEditingDiplomaIndex] = useState<number | null | 'new'>(null);
@@ -115,8 +118,8 @@ export default function CensusPage() {
     setEditingDiplomaIndex(null);
   }
 
-  async function handleSubmit() {
-    if (!current?.campaign || !draft) return;
+  function handleGoToReview() {
+    if (!draft) return;
 
     const activeDependents = draft.dependents.filter((d) => !d.removed);
     const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
@@ -129,14 +132,19 @@ export default function CensusPage() {
       alert('Un document justificatif est requis pour chaque nouveau diplôme.');
       return;
     }
-    if (!confirm("Une fois soumis, vous ne pourrez plus modifier votre recensement tant qu'il est en attente. Continuer ?")) {
-      return;
-    }
+
+    setStep('review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function handleConfirmSubmit() {
+    if (!current?.campaign || !draft) return;
 
     setIsSubmitting(true);
     try {
       await submitCensus(current.campaign.id, draft);
       alert('Votre recensement a été soumis pour validation.');
+      setStep('edit');
       load();
     } catch (error) {
       alert(extractApiError(error).message);
@@ -183,6 +191,97 @@ export default function CensusPage() {
   }
 
   if (!draft) return null;
+
+  if (step === 'review') {
+    const activeDependents = draft.dependents.filter((d) => !d.removed);
+    const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
+
+    return (
+      <div className="max-w-2xl mx-auto p-4 sm:p-8">
+        <h1 className="text-lg font-bold text-[#1e3a5f] mb-1">Récapitulatif</h1>
+        <p className="text-sm text-gray-500 mb-4">
+          Vérifiez attentivement vos informations avant de soumettre définitivement.
+        </p>
+
+        <Section title="Informations Personnelles">
+          <RecapRow label="Téléphone" value={draft.personal.phone} />
+          <RecapRow label="Email" value={draft.personal.email} />
+          <RecapRow label="Adresse" value={draft.personal.address} />
+          <RecapRow label="Ville" value={draft.personal.city} />
+        </Section>
+
+        <Section title="Banque & CNPS">
+          <RecapRow label="Banque" value={draft.personal.bank_name} />
+          <RecapRow label="N° de compte" value={draft.personal.bank_account_number} />
+          <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
+        </Section>
+
+        <Section title="Affectation Organisationnelle (déclarée)">
+          <RecapRow label="Département" value={draft.organizational.declared_department} />
+          <RecapRow label="Service" value={draft.organizational.declared_service} />
+          <RecapRow label="Poste" value={draft.organizational.declared_job_title} />
+        </Section>
+
+        <Section title={`Ayants Droit (${activeDependents.length})`}>
+          {activeDependents.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Aucun.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeDependents.map((dep, i) => (
+                <div key={i} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {dep.first_name} {dep.last_name} {dep.existing_id ? '' : '· nouveau'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {RELATIONSHIP_LABELS[dep.relationship]} · né(e) le {dep.birth_date}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <Section title={`Diplômes & Formations (${activeDiplomas.length})`}>
+          {activeDiplomas.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Aucun.</p>
+          ) : (
+            <div className="space-y-2">
+              {activeDiplomas.map((dip, i) => (
+                <div key={i} className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {dip.title} {dip.existing_id ? '' : '· nouveau'}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {DIPLOMA_TYPE_LABELS[dip.type]} · {dip.institution} ({dip.year_obtained})
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+
+        <div className="flex flex-col sm:flex-row gap-3 mt-4">
+          <button
+            onClick={() => setStep('edit')}
+            disabled={isSubmitting}
+            className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            ← Retour pour corriger
+          </button>
+          <button
+            onClick={handleConfirmSubmit}
+            disabled={isSubmitting}
+            className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60"
+          >
+            {isSubmitting ? 'Envoi...' : 'Confirmer et Soumettre'}
+          </button>
+        </div>
+        <p className="text-xs text-gray-400 text-center mt-3">
+          ⚠️ Ne rechargez pas cette page avant d'avoir soumis, vous perdriez vos modifications.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8">
@@ -318,11 +417,10 @@ export default function CensusPage() {
       </Section>
 
       <button
-        onClick={handleSubmit}
-        disabled={isSubmitting}
-        className="w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60 mt-2"
+        onClick={handleGoToReview}
+        className="w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 mt-2"
       >
-        {isSubmitting ? 'Envoi...' : 'Soumettre le recensement'}
+        Vérifier et Soumettre
       </button>
       <p className="text-xs text-gray-400 text-center mt-3">
         ⚠️ Ne rechargez pas cette page avant d'avoir soumis, vous perdriez vos modifications.
@@ -355,6 +453,15 @@ function Section({ title, action, children }: { title: string; action?: React.Re
         {action}
       </div>
       {children}
+    </div>
+  );
+}
+
+function RecapRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className="text-sm font-medium text-gray-900">{value || '—'}</span>
     </div>
   );
 }
