@@ -58,3 +58,15 @@ export interface ChangePasswordPayload {
 export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
   await apiClient.post('/auth/password', payload);
 }
+
+export type AccountDeletionReason = 'resignation' | 'death' | 'retirement' | 'other';
+
+export interface DeleteAccountPayload {
+  password: string;
+  reason: AccountDeletionReason;
+  notes?: string;
+}
+
+export async function deleteAccount(payload: DeleteAccountPayload): Promise<void> {
+  await apiClient.delete('/auth/account', { data: payload });
+}

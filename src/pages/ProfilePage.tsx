@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { fetchProfile, updateProfile, uploadProfilePhoto } from '../api/profile';
 import type { EmployeeProfile } from '../api/profile';
-import { changePassword } from '../api/auth';
+import { changePassword, deleteAccount } from '../api/auth';
+import type { AccountDeletionReason } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
 import { extractApiError } from '../api/client';
 
 export default function ProfilePage() {
+    const navigate = useNavigate();
+    const { logout } = useAuth();
+
     const [profile, setProfile] = useState<EmployeeProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
@@ -25,6 +31,14 @@ export default function ProfilePage() {
     const [isSavingPassword, setIsSavingPassword] = useState(false);
     const [passwordError, setPasswordError] = useState<string | null>(null);
     const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [deleteReason, setDeleteReason] = useState<AccountDeletionReason>('resignation');
+    const [deleteNotes, setDeleteNotes] = useState('');
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     useEffect(() => {
         load();
@@ -111,6 +125,36 @@ export default function ProfilePage() {
             setPasswordError(extractApiError(error).message);
         } finally {
             setIsSavingPassword(false);
+        }
+    }
+
+    async function handleDeleteAccount() {
+        setDeleteError(null);
+
+        if (deleteConfirmText.trim().toUpperCase() !== 'SUPPRIMER') {
+            setDeleteError('Veuillez taper SUPPRIMER pour confirmer.');
+            return;
+        }
+        if (!deletePassword) {
+            setDeleteError('Veuillez saisir votre mot de passe.');
+            return;
+        }
+
+        setIsDeletingAccount(true);
+
+        try {
+            await deleteAccount({
+                password: deletePassword,
+                reason: deleteReason,
+                notes: deleteNotes.trim() || undefined,
+            });
+
+            await logout();
+            navigate('/login', { replace: true });
+        } catch (error) {
+            setDeleteError(extractApiError(error).message);
+        } finally {
+            setIsDeletingAccount(false);
         }
     }
 
@@ -277,6 +321,96 @@ export default function ProfilePage() {
                     </>
                 )}
             </Section>
+
+            <Section title="Zone Dangereuse">
+                <p className="text-sm text-gray-600 mb-3">
+                    Supprimer votre compte met fin à votre accès à l'application (mobile et web). Votre
+                    dossier employé (informations personnelles, ayants droit, diplômes, historique) est
+                    conservé intégralement dans le système RH.
+                </p>
+                <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="border border-red-600 text-red-600 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-50"
+                >
+                    Supprimer mon compte
+                </button>
+            </Section>
+
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                        <h3 className="font-bold text-red-700 mb-1">Supprimer mon compte</h3>
+                        <p className="text-sm text-gray-600 mb-4">
+                            Cette action est irréversible. Vous ne pourrez plus vous connecter tant qu'un
+                            administrateur ne créera pas un nouveau compte.
+                        </p>
+
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Motif</label>
+                                <select
+                                    value={deleteReason}
+                                    onChange={(e) => setDeleteReason(e.target.value as AccountDeletionReason)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                >
+                                    <option value="resignation">Démission</option>
+                                    <option value="retirement">Retraite</option>
+                                    <option value="other">Autre</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">Précisions (optionnel)</label>
+                                <textarea
+                                    value={deleteNotes}
+                                    onChange={(e) => setDeleteNotes(e.target.value)}
+                                    rows={2}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                />
+                            </div>
+
+                            <Field label="Mot de passe actuel" value={deletePassword} onChange={setDeletePassword} type="password" />
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">
+                                    Tapez SUPPRIMER pour confirmer
+                                </label>
+                                <input
+                                    type="text"
+                                    value={deleteConfirmText}
+                                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                />
+                            </div>
+
+                            {deleteError && <p className="text-sm text-red-600">{deleteError}</p>}
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={() => {
+                                        setShowDeleteModal(false);
+                                        setDeletePassword('');
+                                        setDeleteConfirmText('');
+                                        setDeleteNotes('');
+                                        setDeleteError(null);
+                                    }}
+                                    disabled={isDeletingAccount}
+                                    className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    onClick={handleDeleteAccount}
+                                    disabled={isDeletingAccount}
+                                    className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                                >
+                                    {isDeletingAccount ? 'Suppression...' : 'Supprimer définitivement'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
