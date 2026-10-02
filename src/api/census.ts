@@ -28,12 +28,33 @@ export interface CensusCurrentDiploma {
   year_obtained: number;
 }
 
+export type CensusSubmissionStatus =
+  | 'submitted'
+  | 'career_validated'
+  | 'career_rejected'
+  | 'solde_validated'
+  | 'solde_rejected'
+  | 'validated'
+  | 'rejected';
+
 export interface CensusCurrentResponse {
   campaign: CensusCampaignInfo | null;
-  submission_status?: 'submitted' | 'validated' | 'rejected' | null;
+  message?: string;
+  submission_status?: CensusSubmissionStatus | null;
+  stage_label?: string | null;
   rejection_reason?: string | null;
   current_data?: {
     personal: {
+      first_name: string | null;
+      last_name: string | null;
+      gender: string | null;
+      birth_date: string | null;
+      marital_status: string | null;
+      children_under_6: number | null;
+      total_children: number | null;
+      id_card_number: string | null;
+      recruitment_date: string | null;
+      service_start_date: string | null;
       phone: string | null;
       email: string | null;
       address: string | null;
@@ -46,6 +67,10 @@ export interface CensusCurrentResponse {
       current_department: string | null;
       current_service: string | null;
       current_job_title: string | null;
+      current_trade_body: string | null;
+      current_qualification: string | null;
+      current_personnel_type: string | null;
+      current_administrative_status: string | null;
     };
     dependents: CensusCurrentDependent[];
     diplomas: CensusCurrentDiploma[];
@@ -89,6 +114,16 @@ export interface CensusDraftDiploma {
 
 export interface CensusDraft {
   personal: {
+    first_name: string;
+    last_name: string;
+    gender: string;
+    birth_date: string;
+    marital_status: string;
+    children_under_6: string;
+    total_children: string;
+    id_card_number: string;
+    recruitment_date: string;
+    service_start_date: string;
     phone: string;
     email: string;
     address: string;
@@ -101,6 +136,10 @@ export interface CensusDraft {
     declared_department: string;
     declared_service: string;
     declared_job_title: string;
+    declared_trade_body: string;
+    declared_qualification: string;
+    declared_personnel_type: string;
+    declared_administrative_status: string;
   };
   dependents: CensusDraftDependent[];
   diplomas: CensusDraftDiploma[];
@@ -111,6 +150,16 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
 
   return {
     personal: {
+      first_name: data?.personal.first_name ?? '',
+      last_name: data?.personal.last_name ?? '',
+      gender: data?.personal.gender ?? '',
+      birth_date: data?.personal.birth_date ?? '',
+      marital_status: data?.personal.marital_status ?? '',
+      children_under_6: data?.personal.children_under_6 != null ? String(data.personal.children_under_6) : '',
+      total_children: data?.personal.total_children != null ? String(data.personal.total_children) : '',
+      id_card_number: data?.personal.id_card_number ?? '',
+      recruitment_date: data?.personal.recruitment_date ?? '',
+      service_start_date: data?.personal.service_start_date ?? '',
       phone: data?.personal.phone ?? '',
       email: data?.personal.email ?? '',
       address: data?.personal.address ?? '',
@@ -125,6 +174,10 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
       declared_department: data?.organizational.current_department ?? '',
       declared_service: data?.organizational.current_service ?? '',
       declared_job_title: data?.organizational.current_job_title ?? '',
+      declared_trade_body: data?.organizational.current_trade_body ?? '',
+      declared_qualification: data?.organizational.current_qualification ?? '',
+      declared_personnel_type: data?.organizational.current_personnel_type ?? '',
+      declared_administrative_status: data?.organizational.current_administrative_status ?? '',
     },
     dependents: (data?.dependents ?? []).map((d) => ({
       existing_id: d.id,
@@ -155,6 +208,16 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
 export async function submitCensus(campaignId: number, draft: CensusDraft): Promise<void> {
   const formData = new FormData();
 
+  formData.append('personal[first_name]', draft.personal.first_name ?? '');
+  formData.append('personal[last_name]', draft.personal.last_name ?? '');
+  formData.append('personal[gender]', draft.personal.gender ?? '');
+  formData.append('personal[birth_date]', draft.personal.birth_date ?? '');
+  formData.append('personal[marital_status]', draft.personal.marital_status ?? '');
+  formData.append('personal[children_under_6]', draft.personal.children_under_6 ?? '');
+  formData.append('personal[total_children]', draft.personal.total_children ?? '');
+  formData.append('personal[id_card_number]', draft.personal.id_card_number ?? '');
+  formData.append('personal[recruitment_date]', draft.personal.recruitment_date ?? '');
+  formData.append('personal[service_start_date]', draft.personal.service_start_date ?? '');
   formData.append('personal[phone]', draft.personal.phone ?? '');
   formData.append('personal[email]', draft.personal.email ?? '');
   formData.append('personal[address]', draft.personal.address ?? '');
@@ -166,6 +229,10 @@ export async function submitCensus(campaignId: number, draft: CensusDraft): Prom
   formData.append('organizational[declared_department]', draft.organizational.declared_department ?? '');
   formData.append('organizational[declared_service]', draft.organizational.declared_service ?? '');
   formData.append('organizational[declared_job_title]', draft.organizational.declared_job_title ?? '');
+  formData.append('organizational[declared_trade_body]', draft.organizational.declared_trade_body ?? '');
+  formData.append('organizational[declared_qualification]', draft.organizational.declared_qualification ?? '');
+  formData.append('organizational[declared_personnel_type]', draft.organizational.declared_personnel_type ?? '');
+  formData.append('organizational[declared_administrative_status]', draft.organizational.declared_administrative_status ?? '');
 
   draft.dependents
     .filter((d) => !d.removed)

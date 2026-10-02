@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createDependent } from '../api/dependents';
 import type { NewDependentPayload } from '../api/dependents';
 import { extractApiError } from '../api/client';
+import PhotoCaptureInput from '../components/PhotoCaptureInput';
 
 const RELATIONSHIPS: { value: NewDependentPayload['relationship']; label: string }[] = [
     { value: 'spouse', label: 'Conjoint(e)' },
@@ -22,6 +23,7 @@ export default function AddDependentPage() {
     const [gender, setGender] = useState<'M' | 'F'>('M');
     const [phone, setPhone] = useState('');
 
+    const [photo, setPhoto] = useState<File | null>(null);
     const [birthCertificate, setBirthCertificate] = useState<File | null>(null);
     const [marriageCertificate, setMarriageCertificate] = useState<File | null>(null);
     const [idCard, setIdCard] = useState<File | null>(null);
@@ -61,6 +63,7 @@ export default function AddDependentPage() {
                 birth_place: birthPlace.trim() || undefined,
                 gender,
                 phone: phone.trim() || undefined,
+                photoFile: photo ?? undefined,
                 birthCertificateFile: birthCertificate,
                 marriageCertificateFile: marriageCertificate ?? undefined,
                 idCardFile: idCard ?? undefined,
@@ -129,6 +132,8 @@ export default function AddDependentPage() {
                 </div>
 
                 <Field label="Téléphone" value={phone} onChange={setPhone} type="tel" />
+
+                <PhotoCaptureInput label="Photo" file={photo} onChange={setPhoto} />
 
                 <h2 className="text-sm font-bold text-[#1e3a5f] pt-2">Documents justificatifs</h2>
 

@@ -6,6 +6,7 @@ import {
 } from '../api/census';
 import type { CensusDraft, CensusCurrentResponse, CensusDraftDependent, CensusDraftDiploma } from '../api/census';
 import { extractApiError } from '../api/client';
+import PhotoCaptureInput from '../components/PhotoCaptureInput';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   spouse: 'Conjoint(e)',
@@ -165,17 +166,23 @@ export default function CensusPage() {
     return (
       <div className="p-10 text-center text-gray-500">
         <p className="text-4xl mb-3">📋</p>
-        <p>Aucune campagne de recensement n'est actuellement ouverte.</p>
+        <p>{current?.message ?? "Aucune campagne de recensement n'est actuellement ouverte."}</p>
       </div>
     );
   }
 
-  if (current.submission_status === 'submitted') {
+  // En cours de circuit (en attente à une étape quelconque) — l'employé ne peut
+  // plus modifier tant qu'une étape n'a pas rejeté son dossier.
+  if (
+    current.submission_status === 'submitted' ||
+    current.submission_status === 'career_validated' ||
+    current.submission_status === 'solde_validated'
+  ) {
     return (
       <div className="p-10 text-center">
         <p className="text-4xl mb-3">⏳</p>
         <p className="font-bold text-gray-900">Recensement soumis</p>
-        <p className="text-sm text-gray-500 mt-1">En attente de validation par les RH.</p>
+        <p className="text-sm text-gray-500 mt-1">{current.stage_label}</p>
       </div>
     );
   }
@@ -192,6 +199,11 @@ export default function CensusPage() {
 
   if (!draft) return null;
 
+  const wasRejected =
+    current.submission_status === 'career_rejected' ||
+    current.submission_status === 'solde_rejected' ||
+    current.submission_status === 'rejected';
+
   if (step === 'review') {
     const activeDependents = draft.dependents.filter((d) => !d.removed);
     const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
@@ -204,6 +216,16 @@ export default function CensusPage() {
         </p>
 
         <Section title="Informations Personnelles">
+          <RecapRow label="Prénom" value={draft.personal.first_name} />
+          <RecapRow label="Nom" value={draft.personal.last_name} />
+          <RecapRow label="Sexe" value={draft.personal.gender} />
+          <RecapRow label="Date de naissance" value={draft.personal.birth_date} />
+          <RecapRow label="Statut marital" value={draft.personal.marital_status} />
+          <RecapRow label="Enfants < 6 ans" value={draft.personal.children_under_6} />
+          <RecapRow label="Total enfants" value={draft.personal.total_children} />
+          <RecapRow label="N° Carte d'identité" value={draft.personal.id_card_number} />
+          <RecapRow label="Date de recrutement" value={draft.personal.recruitment_date} />
+          <RecapRow label="Date de prise de service" value={draft.personal.service_start_date} />
           <RecapRow label="Téléphone" value={draft.personal.phone} />
           <RecapRow label="Email" value={draft.personal.email} />
           <RecapRow label="Adresse" value={draft.personal.address} />
@@ -216,10 +238,14 @@ export default function CensusPage() {
           <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
         </Section>
 
-        <Section title="Affectation Organisationnelle (déclarée)">
+        <Section title="Affectation & Classification (déclarées)">
           <RecapRow label="Département" value={draft.organizational.declared_department} />
           <RecapRow label="Service" value={draft.organizational.declared_service} />
           <RecapRow label="Poste" value={draft.organizational.declared_job_title} />
+          <RecapRow label="Corps de métier" value={draft.organizational.declared_trade_body} />
+          <RecapRow label="Qualification" value={draft.organizational.declared_qualification} />
+          <RecapRow label="Type de personnel" value={draft.organizational.declared_personnel_type} />
+          <RecapRow label="Statut administratif" value={draft.organizational.declared_administrative_status} />
         </Section>
 
         <Section title={`Ayants Droit (${activeDependents.length})`}>
@@ -288,9 +314,9 @@ export default function CensusPage() {
       <h1 className="text-lg font-bold text-[#1e3a5f]">{current.campaign.name}</h1>
       {current.campaign.description && <p className="text-sm text-gray-500 mt-1 mb-4">{current.campaign.description}</p>}
 
-      {current.submission_status === 'rejected' && (
+      {wasRejected && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-          <p className="font-semibold text-sm text-red-800">❌ Recensement rejeté</p>
+          <p className="font-semibold text-sm text-red-800">❌ {current.stage_label}</p>
           {current.rejection_reason && <p className="text-sm text-red-700 mt-1">{current.rejection_reason}</p>}
           <p className="text-xs text-red-600 mt-1 italic">Corrigez ci-dessous et resoumettez.</p>
         </div>
@@ -298,6 +324,41 @@ export default function CensusPage() {
 
       <Section title="Informations Personnelles">
         <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
+            <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <SelectField
+              label="Sexe"
+              value={draft.personal.gender}
+              onChange={(v) => updatePersonal('gender', v)}
+              options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }]}
+            />
+            <Field label="Date de naissance (AAAA-MM-JJ)" value={draft.personal.birth_date} onChange={(v) => updatePersonal('birth_date', v)} placeholder="1985-03-12" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <SelectField
+              label="Statut marital"
+              value={draft.personal.marital_status}
+              onChange={(v) => updatePersonal('marital_status', v)}
+              options={[
+                { value: 'celibataire', label: 'Célibataire' },
+                { value: 'marie', label: 'Marié(e)' },
+                { value: 'divorce', label: 'Divorcé(e)' },
+                { value: 'veuf', label: 'Veuf/Veuve' },
+              ]}
+            />
+            <Field label="N° Carte d'identité" value={draft.personal.id_card_number} onChange={(v) => updatePersonal('id_card_number', v)} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Enfants < 6 ans" value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" />
+            <Field label="Total enfants" value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Date de recrutement" value={draft.personal.recruitment_date} onChange={(v) => updatePersonal('recruitment_date', v)} placeholder="2015-09-01" />
+            <Field label="Date de prise de service" value={draft.personal.service_start_date} onChange={(v) => updatePersonal('service_start_date', v)} placeholder="2015-09-15" />
+          </div>
           <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} />
           <Field label="Email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} />
           <Field label="Adresse" value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} />
@@ -313,26 +374,18 @@ export default function CensusPage() {
         </div>
       </Section>
 
-      <Section title="Affectation Organisationnelle">
+      <Section title="Affectation & Classification">
         <div className="mb-3 p-3 rounded-lg bg-amber-50 text-xs text-amber-800">
-          ⚠️ Ces informations sont déclaratives — les RH les vérifieront contre les archives avant toute correction officielle. Elles ne remplacent pas automatiquement votre affectation actuelle.
+          ⚠️ Ces informations sont déclaratives — les RH les vérifieront contre les archives avant toute correction officielle. Elles ne remplacent pas automatiquement vos données actuelles.
         </div>
         <div className="space-y-3">
-          <Field
-            label="Département (déclaré)"
-            value={draft.organizational.declared_department}
-            onChange={(v) => updateOrganizational('declared_department', v)}
-          />
-          <Field
-            label="Service (déclaré)"
-            value={draft.organizational.declared_service}
-            onChange={(v) => updateOrganizational('declared_service', v)}
-          />
-          <Field
-            label="Poste (déclaré)"
-            value={draft.organizational.declared_job_title}
-            onChange={(v) => updateOrganizational('declared_job_title', v)}
-          />
+          <Field label="Département (déclaré)" value={draft.organizational.declared_department} onChange={(v) => updateOrganizational('declared_department', v)} />
+          <Field label="Service (déclaré)" value={draft.organizational.declared_service} onChange={(v) => updateOrganizational('declared_service', v)} />
+          <Field label="Poste (déclaré)" value={draft.organizational.declared_job_title} onChange={(v) => updateOrganizational('declared_job_title', v)} />
+          <Field label="Corps de métier (déclaré)" value={draft.organizational.declared_trade_body} onChange={(v) => updateOrganizational('declared_trade_body', v)} />
+          <Field label="Qualification (déclarée)" value={draft.organizational.declared_qualification} onChange={(v) => updateOrganizational('declared_qualification', v)} />
+          <Field label="Type de personnel (déclaré)" value={draft.organizational.declared_personnel_type} onChange={(v) => updateOrganizational('declared_personnel_type', v)} />
+          <Field label="Statut administratif (déclaré)" value={draft.organizational.declared_administrative_status} onChange={(v) => updateOrganizational('declared_administrative_status', v)} />
         </div>
       </Section>
 
@@ -481,6 +534,34 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: { label: 
   );
 }
 
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] bg-white"
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 function Modal({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -550,6 +631,12 @@ function DependentModal({
             <button onClick={() => setItem((p) => ({ ...p, gender: 'F' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'F' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>Féminin</button>
           </div>
         </div>
+
+        <PhotoCaptureInput
+          label="Photo"
+          file={item.documents.photo ?? null}
+          onChange={(f) => setItem((p) => ({ ...p, documents: { ...p.documents, photo: f } }))}
+        />
 
         <FileField
           label={`Acte de naissance ${item.existing_id ? '(joindre si changement)' : '*'}`}

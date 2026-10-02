@@ -61,26 +61,35 @@ export default function DependentsPage() {
             ) : (
                 <div className="space-y-3">
                     {dependents.map((dep) => (
-                        <div key={dep.id} className="bg-white rounded-xl border border-gray-200 p-4">
-                            <div className="flex items-start justify-between mb-1">
-                                <span className="font-semibold text-sm text-gray-900">{dep.full_name}</span>
-                                <StatusBadge status={dep.validation_status} label={dep.validation_status_label} />
+                        <div key={dep.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-3">
+                            {dep.photo_url ? (
+                                <img src={dep.photo_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
+                            ) : (
+                                <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
+                                    👤
+                                </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between mb-1">
+                                    <span className="font-semibold text-sm text-gray-900">{dep.full_name}</span>
+                                    <StatusBadge status={dep.validation_status} label={dep.validation_status_label} />
+                                </div>
+                                <p className="text-sm text-gray-600">
+                                    {dep.relationship_label}
+                                    {dep.age !== null ? ` · ${dep.age} ans` : ''}
+                                </p>
+                                {dep.validation_status === 'rejected' && dep.rejection_reason && (
+                                    <p className="text-xs text-red-600 mt-1">Motif : {dep.rejection_reason}</p>
+                                )}
+                                {dep.validation_status === 'pending' && (
+                                    <button
+                                        onClick={() => handleDelete(dep)}
+                                        className="text-xs font-semibold text-red-600 hover:underline mt-2"
+                                    >
+                                        Retirer
+                                    </button>
+                                )}
                             </div>
-                            <p className="text-sm text-gray-600">
-                                {dep.relationship_label}
-                                {dep.age !== null ? ` · ${dep.age} ans` : ''}
-                            </p>
-                            {dep.validation_status === 'rejected' && dep.rejection_reason && (
-                                <p className="text-xs text-red-600 mt-1">Motif : {dep.rejection_reason}</p>
-                            )}
-                            {dep.validation_status === 'pending' && (
-                                <button
-                                    onClick={() => handleDelete(dep)}
-                                    className="text-xs font-semibold text-red-600 hover:underline mt-2"
-                                >
-                                    Retirer
-                                </button>
-                            )}
                         </div>
                     ))}
                 </div>
