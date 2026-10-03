@@ -45,6 +45,8 @@ export interface CensusCurrentResponse {
   rejection_reason?: string | null;
   current_data?: {
     personal: {
+      photo_url: string | null;
+      matricule_fonction_publique: string | null;
       first_name: string | null;
       last_name: string | null;
       gender: string | null;
@@ -62,6 +64,15 @@ export interface CensusCurrentResponse {
       bank_name: string | null;
       bank_account_number: string | null;
       cnps_number: string | null;
+    };
+    salary_classification: {
+      classification_type: 'cameroon' | 'numeric';
+      current_category_number: string | null;
+      current_echelon_number: string | null;
+      current_indice: number | null;
+      category_options: Record<string, string>;
+      echelon_options_by_category: Record<string, Record<string, string>>;
+      grid_rows: { category: string; echelon: string; indice: number }[];
     };
     organizational: {
       current_department: string | null;
@@ -114,6 +125,9 @@ export interface CensusDraftDiploma {
 
 export interface CensusDraft {
   personal: {
+    matricule_fonction_publique: string;
+    category_number: string;
+    echelon_number: string;
     first_name: string;
     last_name: string;
     gender: string;
@@ -132,6 +146,7 @@ export interface CensusDraft {
     bank_account_number: string;
     cnps_number: string;
   };
+  photo: File | null;
   organizational: {
     declared_department: string;
     declared_service: string;
@@ -150,6 +165,9 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
 
   return {
     personal: {
+      matricule_fonction_publique: data?.personal.matricule_fonction_publique ?? '',
+      category_number: data?.salary_classification.current_category_number ?? '',
+      echelon_number: data?.salary_classification.current_echelon_number ?? '',
       first_name: data?.personal.first_name ?? '',
       last_name: data?.personal.last_name ?? '',
       gender: data?.personal.gender ?? '',
@@ -168,9 +186,8 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
       bank_account_number: data?.personal.bank_account_number ?? '',
       cnps_number: data?.personal.cnps_number ?? '',
     },
+    photo: null,
     organizational: {
-      // Pré-rempli avec la valeur actuelle si connue, pour que l'employé n'ait
-      // qu'à corriger si nécessaire plutôt que tout ressaisir.
       declared_department: data?.organizational.current_department ?? '',
       declared_service: data?.organizational.current_service ?? '',
       declared_job_title: data?.organizational.current_job_title ?? '',
@@ -208,6 +225,9 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
 export async function submitCensus(campaignId: number, draft: CensusDraft): Promise<void> {
   const formData = new FormData();
 
+  formData.append('personal[matricule_fonction_publique]', draft.personal.matricule_fonction_publique ?? '');
+  formData.append('personal[category_number]', draft.personal.category_number ?? '');
+  formData.append('personal[echelon_number]', draft.personal.echelon_number ?? '');
   formData.append('personal[first_name]', draft.personal.first_name ?? '');
   formData.append('personal[last_name]', draft.personal.last_name ?? '');
   formData.append('personal[gender]', draft.personal.gender ?? '');
@@ -225,6 +245,8 @@ export async function submitCensus(campaignId: number, draft: CensusDraft): Prom
   formData.append('personal[bank_name]', draft.personal.bank_name ?? '');
   formData.append('personal[bank_account_number]', draft.personal.bank_account_number ?? '');
   formData.append('personal[cnps_number]', draft.personal.cnps_number ?? '');
+
+  if (draft.photo) formData.append('photo', draft.photo);
 
   formData.append('organizational[declared_department]', draft.organizational.declared_department ?? '');
   formData.append('organizational[declared_service]', draft.organizational.declared_service ?? '');

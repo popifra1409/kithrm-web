@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   fetchCurrentCensus,
   submitCensus,
@@ -74,6 +74,19 @@ export default function CensusPage() {
       setIsLoading(false);
     }
   }
+
+  const salaryClassification = current?.current_data?.salary_classification;
+
+  const indicePreview = useMemo(() => {
+    if (!salaryClassification || !draft) return null;
+    const { category_number, echelon_number } = draft.personal;
+    if (!category_number || !echelon_number) return null;
+
+    const row = salaryClassification.grid_rows.find(
+      (r) => r.category === category_number && r.echelon === echelon_number
+    );
+    return row?.indice ?? null;
+  }, [salaryClassification, draft?.personal.category_number, draft?.personal.echelon_number]);
 
   function updatePersonal(field: keyof CensusDraft['personal'], value: string) {
     setDraft((d) => (d ? { ...d, personal: { ...d.personal, [field]: value } } : d));
@@ -171,8 +184,6 @@ export default function CensusPage() {
     );
   }
 
-  // En cours de circuit (en attente à une étape quelconque) — l'employé ne peut
-  // plus modifier tant qu'une étape n'a pas rejeté son dossier.
   if (
     current.submission_status === 'submitted' ||
     current.submission_status === 'career_validated' ||
@@ -197,12 +208,16 @@ export default function CensusPage() {
     );
   }
 
-  if (!draft) return null;
+  if (!draft || !salaryClassification) return null;
 
   const wasRejected =
     current.submission_status === 'career_rejected' ||
     current.submission_status === 'solde_rejected' ||
     current.submission_status === 'rejected';
+
+  const echelonOptions = draft.personal.category_number
+    ? salaryClassification.echelon_options_by_category[draft.personal.category_number] ?? {}
+    : {};
 
   if (step === 'review') {
     const activeDependents = draft.dependents.filter((d) => !d.removed);
@@ -215,7 +230,14 @@ export default function CensusPage() {
           Vérifiez attentivement vos informations avant de soumettre définitivement.
         </p>
 
+        {draft.photo && (
+          <div className="flex justify-center mb-4">
+            <img src={URL.createObjectURL(draft.photo)} alt="" className="w-20 h-20 rounded-full object-cover border" />
+          </div>
+        )}
+
         <Section title="Informations Personnelles">
+          <RecapRow label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} />
           <RecapRow label="Prénom" value={draft.personal.first_name} />
           <RecapRow label="Nom" value={draft.personal.last_name} />
           <RecapRow label="Sexe" value={draft.personal.gender} />
@@ -232,13 +254,19 @@ export default function CensusPage() {
           <RecapRow label="Ville" value={draft.personal.city} />
         </Section>
 
+        <Section title="Classification Salariale">
+          <RecapRow label="Catégorie" value={draft.personal.category_number} />
+          <RecapRow label="Échelon" value={draft.personal.echelon_number} />
+          <RecapRow label="Indice (calculé)" value={indicePreview != null ? String(indicePreview) : ''} />
+        </Section>
+
         <Section title="Banque & CNPS">
           <RecapRow label="Banque" value={draft.personal.bank_name} />
           <RecapRow label="N° de compte" value={draft.personal.bank_account_number} />
           <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
         </Section>
 
-        <Section title="Affectation & Classification (déclarées)">
+        <Section title="Affectation & Classification Déclarées">
           <RecapRow label="Département" value={draft.organizational.declared_department} />
           <RecapRow label="Service" value={draft.organizational.declared_service} />
           <RecapRow label="Poste" value={draft.organizational.declared_job_title} />
@@ -322,8 +350,23 @@ export default function CensusPage() {
         </div>
       )}
 
+      <Section title="Photo">
+        <PhotoCaptureInput
+          label="Photo de profil"
+          file={draft.photo}
+          onChange={(f) => setDraft((d) => (d ? { ...d, photo: f } : d))}
+        />
+        {!draft.photo && current.current_data?.personal.photo_url && (
+          <div className="mt-3 flex items-center gap-2">
+            <img src={current.current_data.personal.photo_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+            <span className="text-xs text-gray-500">Photo actuelle (laissez vide pour la conserver)</span>
+          </div>
+        )}
+      </Section>
+
       <Section title="Informations Personnelles">
         <div className="space-y-3">
+          <Field label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} onChange={(v) => updatePersonal('matricule_fonction_publique', v)} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
             <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} />
@@ -343,10 +386,10 @@ export default function CensusPage() {
               value={draft.personal.marital_status}
               onChange={(v) => updatePersonal('marital_status', v)}
               options={[
-                { value: 'celibataire', label: 'Célibataire' },
-                { value: 'marie', label: 'Marié(e)' },
-                { value: 'divorce', label: 'Divorcé(e)' },
-                { value: 'veuf', label: 'Veuf/Veuve' },
+                { value: 'single', label: 'Célibataire' },
+                { value: 'married', label: 'Marié(e)' },
+                { value: 'divorced', label: 'Divorcé(e)' },
+                { value: 'widowed', label: 'Veuf/Veuve' },
               ]}
             />
             <Field label="N° Carte d'identité" value={draft.personal.id_card_number} onChange={(v) => updatePersonal('id_card_number', v)} />
@@ -366,6 +409,35 @@ export default function CensusPage() {
         </div>
       </Section>
 
+      <Section title="Classification Salariale">
+        <p className="text-xs text-gray-500 mb-3">
+          {salaryClassification.classification_type === 'cameroon'
+            ? 'Nomenclature camerounaise (fonctionnaires).'
+            : 'Classification numérique (contractuels).'}{' '}
+          L'indice se calcule automatiquement.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <SelectField
+            label="Catégorie"
+            value={draft.personal.category_number}
+            onChange={(v) => {
+              updatePersonal('category_number', v);
+              updatePersonal('echelon_number', '');
+            }}
+            options={Object.entries(salaryClassification.category_options).map(([value, label]) => ({ value, label }))}
+          />
+          <SelectField
+            label="Échelon"
+            value={draft.personal.echelon_number}
+            onChange={(v) => updatePersonal('echelon_number', v)}
+            options={Object.entries(echelonOptions).map(([value, label]) => ({ value, label }))}
+          />
+        </div>
+        <div className="p-3 rounded-lg bg-blue-50 text-sm text-blue-800">
+          Indice : <span className="font-bold">{indicePreview ?? '—'}</span>
+        </div>
+      </Section>
+
       <Section title="Informations Bancaires & CNPS">
         <div className="space-y-3">
           <Field label="Nom de la banque" value={draft.personal.bank_name} onChange={(v) => updatePersonal('bank_name', v)} />
@@ -374,7 +446,7 @@ export default function CensusPage() {
         </div>
       </Section>
 
-      <Section title="Affectation & Classification">
+      <Section title="Affectation & Classification Déclarées">
         <div className="mb-3 p-3 rounded-lg bg-amber-50 text-xs text-amber-800">
           ⚠️ Ces informations sont déclaratives — les RH les vérifieront contre les archives avant toute correction officielle. Elles ne remplacent pas automatiquement vos données actuelles.
         </div>
