@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createDependent } from '../api/dependents';
 import type { NewDependentPayload } from '../api/dependents';
 import { extractApiError } from '../api/client';
+import DateInput from '../components/DateInput';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 
 const RELATIONSHIPS: { value: NewDependentPayload['relationship']; label: string }[] = [
@@ -40,7 +41,7 @@ export default function AddDependentPage() {
             return;
         }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate.trim())) {
-            setErrorMessage('Format de date attendu : AAAA-MM-JJ.');
+            setErrorMessage('Date de naissance invalide. Format attendu : JJ-MM-AAAA.');
             return;
         }
         if (!birthCertificate) {
@@ -102,12 +103,12 @@ export default function AddDependentPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Prénom(s)" value={firstName} onChange={setFirstName} />
                     <Field label="Nom *" value={lastName} onChange={setLastName} />
+                    <Field label="Prénom(s)" value={firstName} onChange={setFirstName} />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Date de naissance * (AAAA-MM-JJ)" value={birthDate} onChange={setBirthDate} placeholder="2018-02-10" />
+                    <DateInput label="Date de naissance *" value={birthDate} onChange={setBirthDate} />
                     <Field label="Lieu de naissance" value={birthPlace} onChange={setBirthPlace} />
                 </div>
 

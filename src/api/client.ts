@@ -22,7 +22,13 @@ apiClient.interceptors.request.use((config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (axios.isAxiosError(error) && error.response?.status === 401) {
+    // Session expirée ou révoquée : on ne redirige que si la requête échouée
+    // était authentifiée. Les 401 des écrans publics (mot de passe temporaire
+    // erroné à l'activation, identifiants de connexion) ne doivent PAS renvoyer
+    // l'utilisateur vers /login et lui faire perdre sa saisie.
+    const wasAuthenticated = Boolean(error?.config?.headers?.Authorization);
+
+    if (axios.isAxiosError(error) && error.response?.status === 401 && wasAuthenticated) {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';

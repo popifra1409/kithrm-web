@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchLeaves } from '../api/leaves';
 import type { LeaveSummary } from '../api/leaves';
 import { extractApiError } from '../api/client';
+import { isoToFr } from '../lib/dates';
 
 const STATUS_STYLES: Record<LeaveSummary['status'], { bg: string; text: string; label: string }> = {
     pending: { bg: 'bg-amber-100', text: 'text-amber-800', label: 'En attente' },
@@ -65,7 +66,7 @@ export default function LeavesPage() {
                                     </span>
                                 </div>
                                 <p className="text-sm text-gray-600">
-                                    {leave.start_date} → {leave.end_date} · {leave.total_days} j
+                                    {isoToFr(leave.start_date)} → {isoToFr(leave.end_date)} · {leave.total_days} j
                                     {leave.is_split ? ' (fractionné)' : ''}
                                 </p>
                                 {leave.status === 'pending' && leave.current_step && (

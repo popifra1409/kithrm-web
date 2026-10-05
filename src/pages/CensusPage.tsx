@@ -7,6 +7,9 @@ import {
 import type { CensusDraft, CensusCurrentResponse, CensusDraftDependent, CensusDraftDiploma } from '../api/census';
 import { extractApiError } from '../api/client';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
+import DateInput from '../components/DateInput';
+import { isoToFr } from '../lib/dates';
+import { computeCascade } from '../lib/organization';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   spouse: 'Conjoint(e)',
@@ -48,6 +51,12 @@ const EMPTY_DIPLOMA: CensusDraftDiploma = {
 
 type Step = 'edit' | 'review';
 
+const toOptions = (list: { id: number; name: string }[]) =>
+  list.map((x) => ({ value: String(x.id), label: x.name }));
+
+const nameOf = (list: { id: number; name: string }[] | undefined, id: string) =>
+  (id && list?.find((x) => String(x.id) === id)?.name) || '';
+
 export default function CensusPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
@@ -88,13 +97,40 @@ export default function CensusPage() {
     return row?.indice ?? null;
   }, [salaryClassification, draft?.personal.category_number, draft?.personal.echelon_number]);
 
+  const orgOptions = current?.current_data?.organization_options;
+
+  // Listes filtrées de la cascade (voir lib/organization.ts)
+  const cascade = useMemo(
+    () => (orgOptions && draft ? computeCascade(orgOptions, draft.organizational) : null),
+    [orgOptions, draft?.organizational]
+  );
+
   function updatePersonal(field: keyof CensusDraft['personal'], value: string) {
     setDraft((d) => (d ? { ...d, personal: { ...d.personal, [field]: value } } : d));
   }
 
-  function updateOrganizational(field: keyof CensusDraft['organizational'], value: string) {
-    setDraft((d) => (d ? { ...d, organizational: { ...d.organizational, [field]: value } } : d));
+  function patchOrganizational(patch: Partial<CensusDraft['organizational']>) {
+    setDraft((d) => (d ? { ...d, organizational: { ...d.organizational, ...patch } } : d));
   }
+
+  // Chaque changement remet à vide les niveaux situés en dessous.
+  const setBranch = (v: string) =>
+    patchOrganizational({ branch_type: v, direction_id: '', department_id: '', sub_direction_id: '', service_id: '', sector_id: '' });
+  const setDirection = (v: string) =>
+    patchOrganizational({ direction_id: v, department_id: '', sub_direction_id: '', service_id: '', sector_id: '' });
+  // Choisir un département remplit sa direction si elle est connue.
+  const setDepartment = (v: string) => {
+    const department = orgOptions?.departments.find((d) => String(d.id) === v);
+    patchOrganizational({
+      department_id: v,
+      direction_id: department?.direction_id ? String(department.direction_id) : draft?.organizational.direction_id ?? '',
+      service_id: '',
+      sector_id: '',
+    });
+  };
+  const setSubDirection = (v: string) => patchOrganizational({ sub_direction_id: v, service_id: '', sector_id: '' });
+  const setService = (v: string) => patchOrganizational({ service_id: v, sector_id: '' });
+  const setTradeBody = (v: string) => patchOrganizational({ trade_body_id: v, qualification_id: '' });
 
   function toggleRemoveDependent(index: number) {
     setDraft((d) =>
@@ -238,16 +274,16 @@ export default function CensusPage() {
 
         <Section title="Informations Personnelles">
           <RecapRow label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} />
-          <RecapRow label="Prénom" value={draft.personal.first_name} />
           <RecapRow label="Nom" value={draft.personal.last_name} />
+          <RecapRow label="Prénom" value={draft.personal.first_name} />
           <RecapRow label="Sexe" value={draft.personal.gender} />
-          <RecapRow label="Date de naissance" value={draft.personal.birth_date} />
+          <RecapRow label="Date de naissance" value={isoToFr(draft.personal.birth_date)} />
           <RecapRow label="Statut marital" value={draft.personal.marital_status} />
           <RecapRow label="Enfants < 6 ans" value={draft.personal.children_under_6} />
           <RecapRow label="Total enfants" value={draft.personal.total_children} />
           <RecapRow label="N° Carte d'identité" value={draft.personal.id_card_number} />
-          <RecapRow label="Date de recrutement" value={draft.personal.recruitment_date} />
-          <RecapRow label="Date de prise de service" value={draft.personal.service_start_date} />
+          <RecapRow label="Date de recrutement" value={isoToFr(draft.personal.recruitment_date)} />
+          <RecapRow label="Date de prise de service" value={isoToFr(draft.personal.service_start_date)} />
           <RecapRow label="Téléphone" value={draft.personal.phone} />
           <RecapRow label="Email" value={draft.personal.email} />
           <RecapRow label="Adresse" value={draft.personal.address} />
@@ -266,14 +302,27 @@ export default function CensusPage() {
           <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
         </Section>
 
-        <Section title="Affectation & Classification Déclarées">
-          <RecapRow label="Département" value={draft.organizational.declared_department} />
-          <RecapRow label="Service" value={draft.organizational.declared_service} />
-          <RecapRow label="Poste" value={draft.organizational.declared_job_title} />
-          <RecapRow label="Corps de métier" value={draft.organizational.declared_trade_body} />
-          <RecapRow label="Qualification" value={draft.organizational.declared_qualification} />
-          <RecapRow label="Type de personnel" value={draft.organizational.declared_personnel_type} />
-          <RecapRow label="Statut administratif" value={draft.organizational.declared_administrative_status} />
+        <Section title="Affectation Organisationnelle">
+          <RecapRow label="Branche" value={draft.organizational.branch_type === 'administrative' ? 'Administrative' : 'Médicale'} />
+          <RecapRow label="Direction" value={nameOf(orgOptions?.directions, draft.organizational.direction_id)} />
+          {draft.organizational.branch_type === 'administrative' ? (
+            <RecapRow label="Sous-direction" value={nameOf(orgOptions?.sub_directions, draft.organizational.sub_direction_id)} />
+          ) : (
+            <RecapRow label="Département" value={nameOf(orgOptions?.departments, draft.organizational.department_id)} />
+          )}
+          <RecapRow label="Service" value={nameOf(orgOptions?.services, draft.organizational.service_id)} />
+          <RecapRow label="Secteur / Unité" value={nameOf(orgOptions?.sectors, draft.organizational.sector_id)} />
+          <RecapRow label="Corps de métier" value={nameOf(orgOptions?.trade_bodies, draft.organizational.trade_body_id)} />
+          <RecapRow label="Qualification" value={nameOf(orgOptions?.qualifications, draft.organizational.qualification_id)} />
+          <RecapRow label="Poste hiérarchique" value={nameOf(orgOptions?.job_titles, draft.organizational.job_title_id)} />
+          <RecapRow
+            label="Type de personnel"
+            value={orgOptions?.personnel_types.find((t) => t.value === draft.organizational.personnel_type)?.label ?? ''}
+          />
+          <RecapRow
+            label="Statut administratif"
+            value={orgOptions?.administrative_statuses.find((s) => s.value === draft.organizational.administrative_status)?.label ?? ''}
+          />
         </Section>
 
         <Section title={`Ayants Droit (${activeDependents.length})`}>
@@ -284,10 +333,10 @@ export default function CensusPage() {
               {activeDependents.map((dep, i) => (
                 <div key={i} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm font-semibold text-gray-900">
-                    {dep.first_name} {dep.last_name} {dep.existing_id ? '' : '· nouveau'}
+                    {dep.last_name} {dep.first_name} {dep.existing_id ? '' : '· nouveau'}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {RELATIONSHIP_LABELS[dep.relationship]} · né(e) le {dep.birth_date}
+                    {RELATIONSHIP_LABELS[dep.relationship]} · né(e) le {isoToFr(dep.birth_date)}
                   </p>
                 </div>
               ))}
@@ -368,8 +417,8 @@ export default function CensusPage() {
         <div className="space-y-3">
           <Field label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} onChange={(v) => updatePersonal('matricule_fonction_publique', v)} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
             <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} />
+            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
@@ -378,7 +427,7 @@ export default function CensusPage() {
               onChange={(v) => updatePersonal('gender', v)}
               options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }]}
             />
-            <Field label="Date de naissance (AAAA-MM-JJ)" value={draft.personal.birth_date} onChange={(v) => updatePersonal('birth_date', v)} placeholder="1985-03-12" />
+            <DateInput label="Date de naissance" value={draft.personal.birth_date} onChange={(v) => updatePersonal('birth_date', v)} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
@@ -399,8 +448,8 @@ export default function CensusPage() {
             <Field label="Total enfants" value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Date de recrutement" value={draft.personal.recruitment_date} onChange={(v) => updatePersonal('recruitment_date', v)} placeholder="2015-09-01" />
-            <Field label="Date de prise de service" value={draft.personal.service_start_date} onChange={(v) => updatePersonal('service_start_date', v)} placeholder="2015-09-15" />
+            <DateInput label="Date de recrutement" value={draft.personal.recruitment_date} onChange={(v) => updatePersonal('recruitment_date', v)} />
+            <DateInput label="Date de prise de service" value={draft.personal.service_start_date} onChange={(v) => updatePersonal('service_start_date', v)} />
           </div>
           <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} />
           <Field label="Email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} />
@@ -446,19 +495,123 @@ export default function CensusPage() {
         </div>
       </Section>
 
-      <Section title="Affectation & Classification Déclarées">
-        <div className="mb-3 p-3 rounded-lg bg-amber-50 text-xs text-amber-800">
-          ⚠️ Ces informations sont déclaratives — les RH les vérifieront contre les archives avant toute correction officielle. Elles ne remplacent pas automatiquement vos données actuelles.
+      <Section title="Affectation Organisationnelle">
+        <p className="text-xs text-gray-500 mb-3">
+          Choisissez votre branche, puis chaque liste se filtre selon le niveau précédent. Les RH vérifient
+          ces informations avant la validation finale.
+        </p>
+
+        <div className="flex gap-2 mb-4">
+          {(['medical', 'administrative'] as const).map((b) => (
+            <button
+              type="button"
+              key={b}
+              onClick={() => setBranch(b)}
+              className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold border ${draft.organizational.branch_type === b
+                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                  : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+            >
+              {b === 'medical' ? '🏥 Branche Médicale' : '📋 Branche Administrative'}
+            </button>
+          ))}
         </div>
-        <div className="space-y-3">
-          <Field label="Département (déclaré)" value={draft.organizational.declared_department} onChange={(v) => updateOrganizational('declared_department', v)} />
-          <Field label="Service (déclaré)" value={draft.organizational.declared_service} onChange={(v) => updateOrganizational('declared_service', v)} />
-          <Field label="Poste (déclaré)" value={draft.organizational.declared_job_title} onChange={(v) => updateOrganizational('declared_job_title', v)} />
-          <Field label="Corps de métier (déclaré)" value={draft.organizational.declared_trade_body} onChange={(v) => updateOrganizational('declared_trade_body', v)} />
-          <Field label="Qualification (déclarée)" value={draft.organizational.declared_qualification} onChange={(v) => updateOrganizational('declared_qualification', v)} />
-          <Field label="Type de personnel (déclaré)" value={draft.organizational.declared_personnel_type} onChange={(v) => updateOrganizational('declared_personnel_type', v)} />
-          <Field label="Statut administratif (déclaré)" value={draft.organizational.declared_administrative_status} onChange={(v) => updateOrganizational('declared_administrative_status', v)} />
-        </div>
+
+        {cascade && orgOptions && (
+          <div className="space-y-3">
+            <SelectField
+              label="Direction"
+              value={draft.organizational.direction_id}
+              onChange={setDirection}
+              options={toOptions(cascade.directions)}
+            />
+
+            {draft.organizational.branch_type === 'medical' ? (
+              <SelectField
+                label="Département"
+                value={draft.organizational.department_id}
+                onChange={setDepartment}
+                options={toOptions(cascade.departments)}
+              />
+            ) : (
+              <SelectField
+                label="Sous-direction"
+                value={draft.organizational.sub_direction_id}
+                onChange={setSubDirection}
+                options={toOptions(cascade.subDirections)}
+                disabled={!draft.organizational.direction_id && !draft.organizational.sub_direction_id}
+                hint="Choisissez d'abord la direction"
+              />
+            )}
+
+            <SelectField
+              label="Service"
+              value={draft.organizational.service_id}
+              onChange={setService}
+              options={toOptions(cascade.services)}
+              disabled={
+                !draft.organizational.service_id &&
+                !(draft.organizational.branch_type === 'medical'
+                  ? draft.organizational.department_id
+                  : draft.organizational.sub_direction_id)
+              }
+              hint={
+                draft.organizational.branch_type === 'medical'
+                  ? "Choisissez d'abord le département"
+                  : "Choisissez d'abord la sous-direction"
+              }
+            />
+
+            {draft.organizational.service_id && (
+              <SelectField
+                label="Secteur / Unité (optionnel)"
+                value={draft.organizational.sector_id}
+                onChange={(v) => patchOrganizational({ sector_id: v })}
+                options={toOptions(cascade.sectors)}
+              />
+            )}
+
+            <div className="border-t border-gray-100 pt-3 space-y-3">
+              <SelectField
+                label="Corps de métier"
+                value={draft.organizational.trade_body_id}
+                onChange={setTradeBody}
+                options={toOptions(orgOptions.trade_bodies)}
+              />
+              <SelectField
+                label="Qualification"
+                value={draft.organizational.qualification_id}
+                onChange={(v) => patchOrganizational({ qualification_id: v })}
+                options={toOptions(cascade.qualifications)}
+                disabled={!draft.organizational.trade_body_id && !draft.organizational.qualification_id}
+                hint="Choisissez d'abord le corps de métier"
+              />
+              <SelectField
+                label="Poste hiérarchique"
+                value={draft.organizational.job_title_id}
+                onChange={(v) => patchOrganizational({ job_title_id: v })}
+                options={orgOptions.job_titles.map((j) => ({
+                  value: String(j.id),
+                  label: j.hierarchy_level != null ? `${j.name} (Niveau ${j.hierarchy_level})` : j.name,
+                }))}
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <SelectField
+                  label="Type de personnel"
+                  value={draft.organizational.personnel_type}
+                  onChange={(v) => patchOrganizational({ personnel_type: v })}
+                  options={orgOptions.personnel_types}
+                />
+                <SelectField
+                  label="Statut administratif"
+                  value={draft.organizational.administrative_status}
+                  onChange={(v) => patchOrganizational({ administrative_status: v })}
+                  options={orgOptions.administrative_statuses}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </Section>
 
       <Section
@@ -477,7 +630,7 @@ export default function CensusPage() {
               <div key={index} className={`bg-gray-50 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${dep.removed ? 'opacity-50' : ''}`}>
                 <div>
                   <p className={`text-sm font-semibold ${dep.removed ? 'line-through' : ''} text-gray-900`}>
-                    {dep.first_name} {dep.last_name}
+                    {dep.last_name} {dep.first_name}
                   </p>
                   <p className="text-xs text-gray-500">
                     {RELATIONSHIP_LABELS[dep.relationship]} {dep.existing_id ? '' : '· nouveau'}
@@ -611,11 +764,15 @@ function SelectField({
   value,
   onChange,
   options,
+  disabled = false,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
+  disabled?: boolean;
+  hint?: string;
 }) {
   return (
     <div>
@@ -623,9 +780,10 @@ function SelectField({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] bg-white"
+        disabled={disabled}
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] bg-white disabled:bg-gray-100 disabled:text-gray-400"
       >
-        <option value="">—</option>
+        <option value="">{disabled && hint ? hint : '—'}</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
@@ -662,7 +820,7 @@ function DependentModal({
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(item.birth_date.trim())) {
-      alert('Format de date attendu : AAAA-MM-JJ.');
+      alert('Date de naissance invalide. Format attendu : JJ-MM-AAAA.');
       return;
     }
     if (!item.existing_id && !item.documents.birth_certificate) {
@@ -693,9 +851,9 @@ function DependentModal({
             ))}
           </div>
         </div>
-        <Field label="Prénom(s)" value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} />
         <Field label="Nom *" value={item.last_name} onChange={(v) => setItem((p) => ({ ...p, last_name: v }))} />
-        <Field label="Date de naissance * (AAAA-MM-JJ)" value={item.birth_date} onChange={(v) => setItem((p) => ({ ...p, birth_date: v }))} placeholder="2018-02-10" />
+        <Field label="Prénom(s)" value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} />
+        <DateInput label="Date de naissance *" value={item.birth_date} onChange={(v) => setItem((p) => ({ ...p, birth_date: v }))} />
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">Sexe</label>
           <div className="flex gap-2">

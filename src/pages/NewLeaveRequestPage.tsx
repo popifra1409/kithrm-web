@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { fetchLeaveTypes, fetchLeaveBalance, createLeave } from '../api/leaves';
 import type { LeaveType, LeaveBalance } from '../api/leaves';
 import { extractApiError } from '../api/client';
+import DateInput from '../components/DateInput';
+import { isoToFr } from '../lib/dates';
 
 export default function NewLeaveRequestPage() {
     const navigate = useNavigate();
@@ -67,11 +69,11 @@ export default function NewLeaveRequestPage() {
             return;
         }
         if (!isValidDate(startDate) || !isValidDate(endDate)) {
-            setErrorMessage('Format de date attendu : AAAA-MM-JJ.');
+            setErrorMessage('Dates invalides. Format attendu : JJ-MM-AAAA.');
             return;
         }
         if (isSplit && (!isValidDate(startDate2) || !isValidDate(endDate2))) {
-            setErrorMessage('Renseignez des dates valides pour la 2ème prise.');
+            setErrorMessage('Renseignez des dates valides (JJ-MM-AAAA) pour la 2ème prise.');
             return;
         }
         if (!reason.trim()) {
@@ -146,7 +148,7 @@ export default function NewLeaveRequestPage() {
                     ) : balance ? (
                         balance.eligible === false ? (
                             <span className="text-xs text-amber-700">
-                                ⚠️ Pas encore éligible{balance.next_eligibility_date ? ` (à partir du ${balance.next_eligibility_date})` : ''}.
+                                ⚠️ Pas encore éligible{balance.next_eligibility_date ? ` (à partir du ${isoToFr(balance.next_eligibility_date)})` : ''}.
                             </span>
                         ) : balance.available !== undefined ? (
                             <span className="text-xs text-blue-700">
@@ -159,8 +161,8 @@ export default function NewLeaveRequestPage() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field label="Date de début (1ère prise) *" value={startDate} onChange={setStartDate} placeholder="2026-07-01" />
-                    <Field label="Date de fin (1ère prise) *" value={endDate} onChange={setEndDate} placeholder="2026-07-15" />
+                    <DateInput label="Date de début (1ère prise) *" value={startDate} onChange={setStartDate} />
+                    <DateInput label="Date de fin (1ère prise) *" value={endDate} onChange={setEndDate} />
                 </div>
 
                 <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -170,8 +172,8 @@ export default function NewLeaveRequestPage() {
 
                 {isSplit && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <Field label="Date de début (2ème prise) *" value={startDate2} onChange={setStartDate2} placeholder="2026-09-01" />
-                        <Field label="Date de fin (2ème prise) *" value={endDate2} onChange={setEndDate2} placeholder="2026-09-08" />
+                        <DateInput label="Date de début (2ème prise) *" value={startDate2} onChange={setStartDate2} />
+                        <DateInput label="Date de fin (2ème prise) *" value={endDate2} onChange={setEndDate2} />
                     </div>
                 )}
 

@@ -1,11 +1,11 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   login as apiLogin,
-  activate as apiActivate,
+  verifyActivation as apiVerifyActivation,
   fetchMe,
   logout as apiLogout,
 } from '../api/auth';
-import type { AuthUser, LoginPayload, ActivatePayload } from '../api/auth';
+import type { AuthUser, LoginPayload, VerifyActivationPayload } from '../api/auth';
 import { TOKEN_STORAGE_KEY } from '../api/client';
 
 interface AuthContextValue {
@@ -13,7 +13,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (payload: LoginPayload) => Promise<void>;
-  activate: (payload: ActivatePayload) => Promise<void>;
+  /** Étape 2/2 de l'activation : si elle réussit, l'employé est connecté. */
+  completeActivation: (payload: VerifyActivationPayload) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -48,8 +49,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(loggedInUser);
   }
 
-  async function activate(payload: ActivatePayload) {
-    const { token, user: activatedUser } = await apiActivate(payload);
+  async function completeActivation(payload: VerifyActivationPayload) {
+    const { token, user: activatedUser } = await apiVerifyActivation(payload);
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setUser(activatedUser);
   }
@@ -67,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, activate, logout }}
+      value={{ user, isAuthenticated: !!user, isLoading, login, completeActivation, logout }}
     >
       {children}
     </AuthContext.Provider>

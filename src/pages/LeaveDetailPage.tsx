@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { fetchLeave } from '../api/leaves';
 import type { LeaveDetail, LeaveStep } from '../api/leaves';
 import { extractApiError } from '../api/client';
+import { isoToFr } from '../lib/dates';
 
 export default function LeaveDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -42,11 +43,11 @@ export default function LeaveDetailPage() {
             <div className="bg-white rounded-xl border border-gray-200 p-6 mb-4">
                 <h1 className="text-lg font-bold text-[#1e3a5f]">{leave.leave_type}</h1>
                 <p className="text-sm text-gray-700 mt-1">
-                    {leave.start_date} → {leave.end_date} ({leave.total_days} jour(s))
+                    {isoToFr(leave.start_date)} → {isoToFr(leave.end_date)} ({leave.total_days} jour(s))
                 </p>
                 {leave.is_split && leave.start_date_2 && leave.end_date_2 && (
                     <p className="text-sm text-gray-500 mt-1">
-                        2ème prise : {leave.start_date_2} → {leave.end_date_2}
+                        2ème prise : {isoToFr(leave.start_date_2)} → {isoToFr(leave.end_date_2)}
                     </p>
                 )}
 

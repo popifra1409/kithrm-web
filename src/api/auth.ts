@@ -25,9 +25,28 @@ export interface ActivatePayload {
   password_confirmation: string;
 }
 
-interface AuthResponse {
+export interface AuthResponse {
   token: string;
   user: AuthUser;
+}
+
+export interface ActivationCaptcha {
+  id: string;
+  question: string;
+}
+
+export interface ActivationStartResponse {
+  message: string;
+  verification_token: string;
+  expires_in: number;
+  captcha: ActivationCaptcha;
+}
+
+export interface VerifyActivationPayload {
+  verification_token: string;
+  recruitment_date: string; // AAAA-MM-JJ
+  captcha_id: string;
+  captcha_answer: number;
 }
 
 export async function login(payload: LoginPayload): Promise<AuthResponse> {
@@ -35,8 +54,23 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
   return data;
 }
 
-export async function activate(payload: ActivatePayload): Promise<AuthResponse> {
-  const { data } = await apiClient.post<AuthResponse>('/auth/activate', payload);
+/** Activation, étape 1/2 : vérifie les identifiants, ne connecte PAS encore l'employé. */
+export async function startActivation(payload: ActivatePayload): Promise<ActivationStartResponse> {
+  const { data } = await apiClient.post<ActivationStartResponse>('/auth/activate', payload);
+  return data;
+}
+
+/** Demande un nouveau petit calcul (chaque calcul n'est utilisable qu'une fois). */
+export async function refreshActivationCaptcha(verificationToken: string): Promise<ActivationCaptcha> {
+  const { data } = await apiClient.post<{ captcha: ActivationCaptcha }>('/auth/activate/captcha', {
+    verification_token: verificationToken,
+  });
+  return data.captcha;
+}
+
+/** Activation, étape 2/2 : date de recrutement + calcul. Active le compte et connecte. */
+export async function verifyActivation(payload: VerifyActivationPayload): Promise<AuthResponse> {
+  const { data } = await apiClient.post<AuthResponse>('/auth/activate/verify', payload);
   return data;
 }
 
@@ -56,7 +90,7 @@ export interface ChangePasswordPayload {
 }
 
 export async function changePassword(payload: ChangePasswordPayload): Promise<void> {
-  await apiClient.post('/auth/password', payload);
+  await apiClient.put('/auth/password', payload);
 }
 
 export type AccountDeletionReason = 'resignation' | 'death' | 'retirement' | 'other';

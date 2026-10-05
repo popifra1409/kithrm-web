@@ -28,6 +28,41 @@ export interface CensusCurrentDiploma {
   year_obtained: number;
 }
 
+export type BranchType = 'medical' | 'administrative';
+
+/** Affectation actuelle de l'employé (identifiants), pour pré-remplir les menus. */
+export interface CurrentOrganizational {
+  branch_type: BranchType;
+  direction_id: number | null;
+  department_id: number | null;
+  sub_direction_id: number | null;
+  service_id: number | null;
+  sector_id: number | null;
+  trade_body_id: number | null;
+  qualification_id: number | null;
+  job_title_id: number | null;
+  personnel_type: string | null;
+  administrative_status: string | null;
+}
+
+/**
+ * Listes à plat avec l'identifiant du parent : la cascade se filtre localement.
+ *   médicale       : Direction → Département → Service → Secteur
+ *   administrative : Direction → Sous-direction → Service → Secteur
+ */
+export interface OrganizationOptions {
+  directions: { id: number; name: string; has_departments: boolean; has_sub_directions: boolean }[];
+  departments: { id: number; name: string; direction_id: number | null }[];
+  sub_directions: { id: number; name: string; direction_id: number | null }[];
+  services: { id: number; name: string; type: string; department_id: number | null; sub_direction_id: number | null }[];
+  sectors: { id: number; name: string; service_id: number }[];
+  trade_bodies: { id: number; name: string }[];
+  qualifications: { id: number; name: string; trade_body_id: number }[];
+  job_titles: { id: number; name: string; hierarchy_level: number | null }[];
+  personnel_types: { value: string; label: string }[];
+  administrative_statuses: { value: string; label: string }[];
+}
+
 export type CensusSubmissionStatus =
   | 'submitted'
   | 'career_validated'
@@ -74,15 +109,8 @@ export interface CensusCurrentResponse {
       echelon_options_by_category: Record<string, Record<string, string>>;
       grid_rows: { category: string; echelon: string; indice: number }[];
     };
-    organizational: {
-      current_department: string | null;
-      current_service: string | null;
-      current_job_title: string | null;
-      current_trade_body: string | null;
-      current_qualification: string | null;
-      current_personnel_type: string | null;
-      current_administrative_status: string | null;
-    };
+    organizational: CurrentOrganizational;
+    organization_options: OrganizationOptions;
     dependents: CensusCurrentDependent[];
     diplomas: CensusCurrentDiploma[];
   };
@@ -147,17 +175,26 @@ export interface CensusDraft {
     cnps_number: string;
   };
   photo: File | null;
+  // Valeurs de menus : identifiant en texte, '' = non choisi.
   organizational: {
-    declared_department: string;
-    declared_service: string;
-    declared_job_title: string;
-    declared_trade_body: string;
-    declared_qualification: string;
-    declared_personnel_type: string;
-    declared_administrative_status: string;
+    branch_type: string;
+    direction_id: string;
+    department_id: string;
+    sub_direction_id: string;
+    service_id: string;
+    sector_id: string;
+    trade_body_id: string;
+    qualification_id: string;
+    job_title_id: string;
+    personnel_type: string;
+    administrative_status: string;
   };
   dependents: CensusDraftDependent[];
   diplomas: CensusDraftDiploma[];
+}
+
+function idToString(value: number | null | undefined): string {
+  return value != null ? String(value) : '';
 }
 
 export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
@@ -188,13 +225,17 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
     },
     photo: null,
     organizational: {
-      declared_department: data?.organizational.current_department ?? '',
-      declared_service: data?.organizational.current_service ?? '',
-      declared_job_title: data?.organizational.current_job_title ?? '',
-      declared_trade_body: data?.organizational.current_trade_body ?? '',
-      declared_qualification: data?.organizational.current_qualification ?? '',
-      declared_personnel_type: data?.organizational.current_personnel_type ?? '',
-      declared_administrative_status: data?.organizational.current_administrative_status ?? '',
+      branch_type: data?.organizational.branch_type ?? 'medical',
+      direction_id: idToString(data?.organizational.direction_id),
+      department_id: idToString(data?.organizational.department_id),
+      sub_direction_id: idToString(data?.organizational.sub_direction_id),
+      service_id: idToString(data?.organizational.service_id),
+      sector_id: idToString(data?.organizational.sector_id),
+      trade_body_id: idToString(data?.organizational.trade_body_id),
+      qualification_id: idToString(data?.organizational.qualification_id),
+      job_title_id: idToString(data?.organizational.job_title_id),
+      personnel_type: data?.organizational.personnel_type ?? '',
+      administrative_status: data?.organizational.administrative_status ?? '',
     },
     dependents: (data?.dependents ?? []).map((d) => ({
       existing_id: d.id,
@@ -248,13 +289,18 @@ export async function submitCensus(campaignId: number, draft: CensusDraft): Prom
 
   if (draft.photo) formData.append('photo', draft.photo);
 
-  formData.append('organizational[declared_department]', draft.organizational.declared_department ?? '');
-  formData.append('organizational[declared_service]', draft.organizational.declared_service ?? '');
-  formData.append('organizational[declared_job_title]', draft.organizational.declared_job_title ?? '');
-  formData.append('organizational[declared_trade_body]', draft.organizational.declared_trade_body ?? '');
-  formData.append('organizational[declared_qualification]', draft.organizational.declared_qualification ?? '');
-  formData.append('organizational[declared_personnel_type]', draft.organizational.declared_personnel_type ?? '');
-  formData.append('organizational[declared_administrative_status]', draft.organizational.declared_administrative_status ?? '');
+  const org = draft.organizational;
+  formData.append('organizational[declared_branch_type]', org.branch_type ?? '');
+  formData.append('organizational[declared_direction_id]', org.direction_id ?? '');
+  formData.append('organizational[declared_department_id]', org.department_id ?? '');
+  formData.append('organizational[declared_sub_direction_id]', org.sub_direction_id ?? '');
+  formData.append('organizational[declared_service_id]', org.service_id ?? '');
+  formData.append('organizational[declared_sector_id]', org.sector_id ?? '');
+  formData.append('organizational[declared_trade_body_id]', org.trade_body_id ?? '');
+  formData.append('organizational[declared_qualification_id]', org.qualification_id ?? '');
+  formData.append('organizational[declared_job_title_id]', org.job_title_id ?? '');
+  formData.append('organizational[declared_personnel_type]', org.personnel_type ?? '');
+  formData.append('organizational[declared_administrative_status]', org.administrative_status ?? '');
 
   draft.dependents
     .filter((d) => !d.removed)
