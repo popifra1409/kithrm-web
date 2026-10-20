@@ -45,23 +45,28 @@ export function computeCascade(options: OrganizationOptions, org: CensusDraft['o
         org.branch_type === 'medical' ? d.has_departments : org.branch_type === 'administrative' ? d.has_sub_directions : false
     );
 
-    // Un niveau n'est proposé qu'une fois son parent choisi. Sans ce garde-fou,
-    // « aucun parent » (null) correspondrait à tous les éléments sans parent
-    // (null === null) et ferait apparaître à tort des éléments orphelins.
-    //
-    // Exception voulue : le DÉPARTEMENT. La direction le filtre quand elle est choisie ;
-    // sinon tous les départements sont proposés, pour que ceux qui n'ont pas (encore)
-    // de direction restent accessibles. Choisir un département remplit sa direction.
+    // Un niveau n'est proposé qu'une fois son parent choisi, SAUF exception voulue :
+    // la DIRECTION est facultative et ne conditionne ni le département ni la
+    // sous-direction (règle du serveur : App\Support\OrganizationalAssignment).
+    // Sans ce garde-fou, « aucun parent » (null) correspondrait à tous les éléments
+    // sans parent (null === null) et ferait apparaître à tort des éléments orphelins.
     const departments =
         directionId === null ? options.departments : options.departments.filter((d) => d.direction_id === directionId);
-    const subDirections = directionId === null ? [] : options.sub_directions.filter((s) => s.direction_id === directionId);
+    const subDirections =
+        directionId === null ? options.sub_directions : options.sub_directions.filter((s) => s.direction_id === directionId);
 
+    // La branche seule suffit pour proposer des services ; le département (médical) ou
+    // la sous-direction (administratif) ne fait que restreindre la liste.
     let services: OrganizationOptions['services'] = [];
-    if (org.branch_type === 'medical' && departmentId !== null) {
-        services = options.services.filter((s) => s.type === 'medical' && s.department_id === departmentId);
-    } else if (org.branch_type === 'administrative' && subDirectionId !== null) {
+    if (org.branch_type === 'medical') {
         services = options.services.filter(
-            (s) => ADMINISTRATIVE_SERVICE_TYPES.includes(s.type) && s.sub_direction_id === subDirectionId
+            (s) => s.type === 'medical' && (departmentId === null || s.department_id === departmentId)
+        );
+    } else if (org.branch_type === 'administrative') {
+        services = options.services.filter(
+            (s) =>
+                ADMINISTRATIVE_SERVICE_TYPES.includes(s.type) &&
+                (subDirectionId === null || s.sub_direction_id === subDirectionId)
         );
     }
 

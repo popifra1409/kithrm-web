@@ -3,7 +3,11 @@ import { apiClient } from './client';
 export interface EmployeeSummary {
   matricule: string;
   full_name: string;
+  /** URL publique absolue de la photo (plusieurs tuiles l'utilisent comme src). */
   photo: string | null;
+  job_title: string | null;
+  department: string | null;
+  service: string | null;
 }
 
 export interface AuthUser {

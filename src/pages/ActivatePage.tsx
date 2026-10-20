@@ -215,6 +215,7 @@ export default function ActivatePage() {
               label="Matricule"
               value={matricule}
               onChange={setMatricule}
+              onBlur={() => setMatricule((v) => v.trim())}
               placeholder="Ex: 98240812A"
               error={fieldErrors.matricule?.[0]}
             />
@@ -331,6 +332,7 @@ function Field({
   label,
   value,
   onChange,
+  onBlur,
   placeholder,
   type = 'text',
   error,
@@ -338,6 +340,7 @@ function Field({
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   placeholder?: string;
   type?: string;
   error?: string;
@@ -349,6 +352,7 @@ function Field({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
       />

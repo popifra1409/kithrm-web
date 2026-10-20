@@ -113,6 +113,10 @@ export default function CensusPage() {
     setDraft((d) => (d ? { ...d, organizational: { ...d.organizational, ...patch } } : d));
   }
 
+  function patchContract(patch: Partial<CensusDraft['contract']>) {
+    setDraft((d) => (d ? { ...d, contract: { ...d.contract, ...patch } } : d));
+  }
+
   // Chaque changement remet à vide les niveaux situés en dessous.
   const setBranch = (v: string) =>
     patchOrganizational({ branch_type: v, direction_id: '', department_id: '', sub_direction_id: '', service_id: '', sector_id: '' });
@@ -251,6 +255,9 @@ export default function CensusPage() {
     current.submission_status === 'solde_rejected' ||
     current.submission_status === 'rejected';
 
+  // Annulé par les RH : rien n'est rejeté, les RH redonnent simplement la main.
+  const wasCanceled = current.submission_status === 'canceled';
+
   const echelonOptions = draft.personal.category_number
     ? salaryClassification.echelon_options_by_category[draft.personal.category_number] ?? {}
     : {};
@@ -273,7 +280,7 @@ export default function CensusPage() {
         )}
 
         <Section title="Informations Personnelles">
-          <RecapRow label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} />
+          <RecapRow label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique.trim()} />
           <RecapRow label="Nom" value={draft.personal.last_name} />
           <RecapRow label="Prénom" value={draft.personal.first_name} />
           <RecapRow label="Sexe" value={draft.personal.gender} />
@@ -294,6 +301,13 @@ export default function CensusPage() {
           <RecapRow label="Catégorie" value={draft.personal.category_number} />
           <RecapRow label="Échelon" value={draft.personal.echelon_number} />
           <RecapRow label="Indice (calculé)" value={indicePreview != null ? String(indicePreview) : ''} />
+        </Section>
+
+        <Section title="Contrat de travail & prise de service">
+          <RecapRow label="Numéro de contrat" value={draft.contract.contract_number.trim()} />
+          <RecapRow label="Type de contrat" value={current.current_data?.contract.contract_type ?? ''} />
+          <RecapRow label="Contrat joint" value={draft.contract.contract_document?.name ?? ''} />
+          <RecapRow label="Prise de service jointe" value={draft.contract.service_start_document?.name ?? ''} />
         </Section>
 
         <Section title="Banque & CNPS">
@@ -399,6 +413,14 @@ export default function CensusPage() {
         </div>
       )}
 
+      {wasCanceled && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <p className="font-semibold text-sm text-amber-800">↩️ {current.stage_label ?? 'Recensement annulé par les RH'}</p>
+          {current.cancellation_reason && <p className="text-sm text-amber-700 mt-1">{current.cancellation_reason}</p>}
+          <p className="text-xs text-amber-600 mt-1 italic">Vérifiez vos informations ci-dessous et resoumettez.</p>
+        </div>
+      )}
+
       <Section title="Photo">
         <PhotoCaptureInput
           label="Photo de profil"
@@ -415,7 +437,12 @@ export default function CensusPage() {
 
       <Section title="Informations Personnelles">
         <div className="space-y-3">
-          <Field label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique} onChange={(v) => updatePersonal('matricule_fonction_publique', v)} />
+          <Field
+            label="Matricule Fonction Publique"
+            value={draft.personal.matricule_fonction_publique}
+            onChange={(v) => updatePersonal('matricule_fonction_publique', v)}
+            onBlur={() => updatePersonal('matricule_fonction_publique', draft.personal.matricule_fonction_publique.trim())}
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} />
             <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
@@ -487,6 +514,50 @@ export default function CensusPage() {
         </div>
       </Section>
 
+      <Section title="Contrat de travail & prise de service">
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field
+              label="Numéro de contrat"
+              value={draft.contract.contract_number}
+              onChange={(v) => patchContract({ contract_number: v })}
+              onBlur={() => patchContract({ contract_number: draft.contract.contract_number.trim() })}
+              placeholder="Ex: CT-2024-001"
+            />
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Type de contrat</label>
+              <p className="text-sm text-gray-700 py-2">
+                {current.current_data?.contract.contract_type ?? '—'}
+                <span className="block text-xs text-gray-400">Fixé par les RH</span>
+              </p>
+            </div>
+          </div>
+
+          <FileField
+            label="Contrat de travail (PDF ou image)"
+            file={draft.contract.contract_document}
+            onChange={(f) => patchContract({ contract_document: f })}
+          />
+          {!draft.contract.contract_document && current.current_data?.contract.contract_document_url && (
+            <DocumentLink label="📄 Contrat déjà enregistré (joignez un fichier pour le remplacer)" url={current.current_data.contract.contract_document_url} />
+          )}
+
+          <FileField
+            label="Document de prise de service (PDF ou image)"
+            file={draft.contract.service_start_document}
+            onChange={(f) => patchContract({ service_start_document: f })}
+          />
+          {!draft.contract.service_start_document && current.current_data?.contract.service_start_document_url && (
+            <DocumentLink label="📄 Prise de service déjà enregistrée (joignez un fichier pour la remplacer)" url={current.current_data.contract.service_start_document_url} />
+          )}
+
+          <p className="text-xs text-gray-400">
+            Champs facultatifs : sans numéro ni document, la soumission passe quand même et les RH vous la
+            réclameront à la vérification.
+          </p>
+        </div>
+      </Section>
+
       <Section title="Informations Bancaires & CNPS">
         <div className="space-y-3">
           <Field label="Nom de la banque" value={draft.personal.bank_name} onChange={(v) => updatePersonal('bank_name', v)} />
@@ -497,8 +568,9 @@ export default function CensusPage() {
 
       <Section title="Affectation Organisationnelle">
         <p className="text-xs text-gray-500 mb-3">
-          Choisissez votre branche, puis chaque liste se filtre selon le niveau précédent. Les RH vérifient
-          ces informations avant la validation finale.
+          Chaque niveau facultatif (direction, département/sous-direction, unité) ne fait que restreindre la liste
+          suivante. Vérifiez bien l'ordre : Direction → Département ou Sous-direction → Service → Unité / Secteur.
+          Les RH vérifient ces informations avant la validation finale.
         </p>
 
         <div className="flex gap-2 mb-4">
@@ -524,6 +596,7 @@ export default function CensusPage() {
               value={draft.organizational.direction_id}
               onChange={setDirection}
               options={toOptions(cascade.directions)}
+              hint="Facultatif : restreint les listes suivantes"
             />
 
             {draft.organizational.branch_type === 'medical' ? (
@@ -532,6 +605,7 @@ export default function CensusPage() {
                 value={draft.organizational.department_id}
                 onChange={setDepartment}
                 options={toOptions(cascade.departments)}
+                hint="Facultatif : restreint la liste des services"
               />
             ) : (
               <SelectField
@@ -539,8 +613,7 @@ export default function CensusPage() {
                 value={draft.organizational.sub_direction_id}
                 onChange={setSubDirection}
                 options={toOptions(cascade.subDirections)}
-                disabled={!draft.organizational.direction_id && !draft.organizational.sub_direction_id}
-                hint="Choisissez d'abord la direction"
+                hint="Facultatif : restreint la liste des services"
               />
             )}
 
@@ -549,27 +622,20 @@ export default function CensusPage() {
               value={draft.organizational.service_id}
               onChange={setService}
               options={toOptions(cascade.services)}
-              disabled={
-                !draft.organizational.service_id &&
-                !(draft.organizational.branch_type === 'medical'
-                  ? draft.organizational.department_id
-                  : draft.organizational.sub_direction_id)
-              }
-              hint={
-                draft.organizational.branch_type === 'medical'
-                  ? "Choisissez d'abord le département"
-                  : "Choisissez d'abord la sous-direction"
-              }
             />
 
-            {draft.organizational.service_id && (
-              <SelectField
-                label="Secteur / Unité (optionnel)"
-                value={draft.organizational.sector_id}
-                onChange={(v) => patchOrganizational({ sector_id: v })}
-                options={toOptions(cascade.sectors)}
-              />
-            )}
+            <SelectField
+              label="Unité / Secteur"
+              value={draft.organizational.sector_id}
+              onChange={(v) => patchOrganizational({ sector_id: v })}
+              options={toOptions(cascade.sectors)}
+              disabled={!draft.organizational.service_id}
+              hint={!draft.organizational.service_id
+                ? "Choisissez d'abord un service"
+                : cascade.sectors.length === 0
+                  ? 'Aucune unité / secteur rattachée à ce service'
+                  : 'Facultatif : unité ou secteur rattaché au service'}
+            />
 
             <div className="border-t border-gray-100 pt-3 space-y-3">
               <SelectField
@@ -744,7 +810,7 @@ function RecapRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+function Field({ label, value, onChange, onBlur, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; onBlur?: () => void; placeholder?: string; type?: string }) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
@@ -752,6 +818,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: { label: 
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
       />
@@ -788,6 +855,7 @@ function SelectField({
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+      {!disabled && hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
     </div>
   );
 }
@@ -951,6 +1019,14 @@ function DiplomaModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+function DocumentLink({ label, url }: { label: string; url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="block text-xs text-[#1e3a5f] hover:underline">
+      {label}
+    </a>
   );
 }
 

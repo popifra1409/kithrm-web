@@ -4,6 +4,7 @@ export interface AppInfo {
     hospital_name: string;
     hospital_short_name: string;
     logo_url: string | null;
+    favicon_url?: string | null;
 }
 
 export async function fetchAppInfo(): Promise<AppInfo> {

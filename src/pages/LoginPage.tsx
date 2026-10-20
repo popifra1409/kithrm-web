@@ -60,6 +60,7 @@ export default function LoginPage() {
               type="text"
               value={matricule}
               onChange={(e) => setMatricule(e.target.value)}
+              onBlur={() => setMatricule((v) => v.trim())}
               placeholder="Ex: 98240812A"
               autoCapitalize="characters"
               autoComplete="username"

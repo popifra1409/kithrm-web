@@ -28,6 +28,14 @@ export interface CensusCurrentDiploma {
   year_obtained: number;
 }
 
+/** Contrat de travail et prise de service, tels qu'enregistrés sur la fiche. */
+export interface CensusCurrentContract {
+  contract_number: string | null;
+  contract_type: string | null;
+  contract_document_url: string | null;
+  service_start_document_url: string | null;
+}
+
 export type BranchType = 'medical' | 'administrative';
 
 /** Affectation actuelle de l'employé (identifiants), pour pré-remplir les menus. */
@@ -70,7 +78,8 @@ export type CensusSubmissionStatus =
   | 'solde_validated'
   | 'solde_rejected'
   | 'validated'
-  | 'rejected';
+  | 'rejected'
+  | 'canceled';
 
 export interface CensusCurrentResponse {
   campaign: CensusCampaignInfo | null;
@@ -78,6 +87,7 @@ export interface CensusCurrentResponse {
   submission_status?: CensusSubmissionStatus | null;
   stage_label?: string | null;
   rejection_reason?: string | null;
+  cancellation_reason?: string | null;
   current_data?: {
     personal: {
       photo_url: string | null;
@@ -111,6 +121,7 @@ export interface CensusCurrentResponse {
     };
     organizational: CurrentOrganizational;
     organization_options: OrganizationOptions;
+    contract: CensusCurrentContract;
     dependents: CensusCurrentDependent[];
     diplomas: CensusCurrentDiploma[];
   };
@@ -151,6 +162,12 @@ export interface CensusDraftDiploma {
   document?: File | null;
 }
 
+export interface CensusDraftContract {
+  contract_number: string;
+  contract_document: File | null;
+  service_start_document: File | null;
+}
+
 export interface CensusDraft {
   personal: {
     matricule_fonction_publique: string;
@@ -175,6 +192,7 @@ export interface CensusDraft {
     cnps_number: string;
   };
   photo: File | null;
+  contract: CensusDraftContract;
   // Valeurs de menus : identifiant en texte, '' = non choisi.
   organizational: {
     branch_type: string;
@@ -224,6 +242,11 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
       cnps_number: data?.personal.cnps_number ?? '',
     },
     photo: null,
+    contract: {
+      contract_number: data?.contract.contract_number ?? '',
+      contract_document: null,
+      service_start_document: null,
+    },
     organizational: {
       branch_type: data?.organizational.branch_type ?? 'medical',
       direction_id: idToString(data?.organizational.direction_id),
@@ -266,7 +289,10 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
 export async function submitCensus(campaignId: number, draft: CensusDraft): Promise<void> {
   const formData = new FormData();
 
-  formData.append('personal[matricule_fonction_publique]', draft.personal.matricule_fonction_publique ?? '');
+  formData.append(
+    'personal[matricule_fonction_publique]',
+    (draft.personal.matricule_fonction_publique ?? '').trim()
+  );
   formData.append('personal[category_number]', draft.personal.category_number ?? '');
   formData.append('personal[echelon_number]', draft.personal.echelon_number ?? '');
   formData.append('personal[first_name]', draft.personal.first_name ?? '');
@@ -288,6 +314,11 @@ export async function submitCensus(campaignId: number, draft: CensusDraft): Prom
   formData.append('personal[cnps_number]', draft.personal.cnps_number ?? '');
 
   if (draft.photo) formData.append('photo', draft.photo);
+
+  const contract = draft.contract;
+  formData.append('contract[contract_number]', (contract.contract_number ?? '').trim());
+  if (contract.contract_document) formData.append('contract_document', contract.contract_document);
+  if (contract.service_start_document) formData.append('service_start_document', contract.service_start_document);
 
   const org = draft.organizational;
   formData.append('organizational[declared_branch_type]', org.branch_type ?? '');
