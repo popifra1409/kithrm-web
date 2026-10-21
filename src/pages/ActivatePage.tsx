@@ -3,12 +3,15 @@ import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppInfo } from '../context/AppInfoContext';
-import { startActivation, refreshActivationCaptcha } from '../api/auth';
+import { startActivation, refreshActivationCaptcha, requestActivationReview } from '../api/auth';
 import type { ActivationCaptcha } from '../api/auth';
 import { extractApiError } from '../api/client';
 import DateInput from '../components/DateInput';
 
-type Step = 'credentials' | 'verification';
+type Step = 'credentials' | 'verification' | 'review_requested';
+
+/** L'employé qui ne connaît que son année d'entrée saisit une année, pas une date. */
+type DateMode = 'full' | 'year';
 
 interface VerificationSession {
   token: string;
@@ -19,6 +22,13 @@ interface VerificationErrorBody {
   message?: string;
   captcha?: ActivationCaptcha;
   remaining_attempts?: number;
+}
+
+const EARLIEST_YEAR = 1980;
+
+function yearOptions(): number[] {
+  const last = new Date().getFullYear();
+  return Array.from({ length: last - EARLIEST_YEAR + 1 }, (_, i) => last - i);
 }
 
 export default function ActivatePage() {
@@ -36,21 +46,38 @@ export default function ActivatePage() {
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
 
   // Étape 2
+  const [dateMode, setDateMode] = useState<DateMode>('full');
   const [recruitmentDate, setRecruitmentDate] = useState('');
+  const [declaredYear, setDeclaredYear] = useState('');
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null);
+
+  // Secours RH
+  const [reviewReference, setReviewReference] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
 
+  /** Date réellement envoyée : en mode année, le jour et le mois n'ont pas d'effet. */
+  function declaredDate(): string {
+    if (dateMode === 'year') return declaredYear ? `${declaredYear}-01-01` : '';
+    return recruitmentDate;
+  }
+
+  function resetVerificationFields() {
+    setRecruitmentDate('');
+    setDeclaredYear('');
+    setDateMode('full');
+    setCaptchaAnswer('');
+    setRemainingAttempts(null);
+  }
+
   function backToCredentials(message: string | null) {
     setSession(null);
     setStep('credentials');
-    setRecruitmentDate('');
-    setCaptchaAnswer('');
-    setRemainingAttempts(null);
+    resetVerificationFields();
     setErrorMessage(message);
   }
 
@@ -85,9 +112,7 @@ export default function ActivatePage() {
       });
 
       setSession({ token: response.verification_token, captcha: response.captcha });
-      setRecruitmentDate('');
-      setCaptchaAnswer('');
-      setRemainingAttempts(null);
+      resetVerificationFields();
       setStep('verification');
     } catch (error) {
       const apiError = extractApiError(error);
@@ -104,8 +129,12 @@ export default function ActivatePage() {
 
     setErrorMessage(null);
 
-    if (!recruitmentDate) {
-      setErrorMessage('Veuillez indiquer votre date de recrutement.');
+    if (dateMode === 'year' ? !declaredYear : !recruitmentDate) {
+      setErrorMessage(
+        dateMode === 'year'
+          ? 'Veuillez indiquer votre année de recrutement.'
+          : 'Veuillez indiquer votre date de recrutement.'
+      );
       return;
     }
 
@@ -119,7 +148,7 @@ export default function ActivatePage() {
     try {
       await completeActivation({
         verification_token: session.token,
-        recruitment_date: recruitmentDate,
+        recruitment_date: declaredDate(),
         captcha_id: session.captcha.id,
         captcha_answer: Number(captchaAnswer),
       });
@@ -142,6 +171,58 @@ export default function ActivatePage() {
           setCaptchaAnswer('');
           setRemainingAttempts(body.remaining_attempts ?? null);
           setErrorMessage(body.message ?? 'Vérification incorrecte.');
+          return;
+        }
+      }
+
+      setErrorMessage(extractApiError(error).message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  /**
+   * Secours : l'employé ne retrouve pas sa date. On enregistre une demande que les
+   * RH valideront au guichet après vérification d'identité ; le calcul doit être
+   * résolu pour éviter d'engorger la file d'attente.
+   */
+  async function handleRequestReview() {
+    if (!session) return;
+
+    setErrorMessage(null);
+
+    if (captchaAnswer.trim() === '' || Number.isNaN(Number(captchaAnswer))) {
+      setErrorMessage('Résolvez d\'abord le petit calcul, puis envoyez votre demande aux RH.');
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await requestActivationReview({
+        verification_token: session.token,
+        captcha_id: session.captcha.id,
+        captcha_answer: Number(captchaAnswer),
+        self_declared_date: declaredDate() || undefined,
+      });
+
+      setReviewReference(response.reference);
+      setStep('review_requested');
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const body = error.response?.data as VerificationErrorBody | undefined;
+
+        if (status === 410 || status === 409) {
+          backToCredentials(body?.message ?? null);
+          return;
+        }
+
+        // Calcul incorrect : un nouveau calcul est fourni, on reste sur l'étape 2.
+        if (status === 422 && body?.captcha) {
+          setSession((current) => (current ? { ...current, captcha: body.captcha as ActivationCaptcha } : current));
+          setCaptchaAnswer('');
+          setErrorMessage(body.message ?? 'Le résultat du calcul est incorrect.');
           return;
         }
       }
@@ -188,7 +269,7 @@ export default function ActivatePage() {
             </div>
           )}
 
-          {step === 'credentials' ? (
+          {step === 'credentials' && (
             <>
               <h1 className="text-xl font-bold text-[#1e3a5f]">Activer mon compte</h1>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
@@ -197,14 +278,26 @@ export default function ActivatePage() {
               </p>
               <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">Étape 1 sur 2</p>
             </>
-          ) : (
+          )}
+
+          {step === 'verification' && (
             <>
               <h1 className="text-xl font-bold text-[#1e3a5f]">Vérification de sécurité</h1>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                Dernière étape : confirmez votre date de recrutement et résolvez le petit calcul pour
-                finaliser l'activation de votre compte.
+                Dernière étape : confirmez votre année d&apos;entrée et résolvez le petit calcul pour
+                finaliser l&apos;activation de votre compte.
               </p>
               <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">Étape 2 sur 2</p>
+            </>
+          )}
+
+          {step === 'review_requested' && (
+            <>
+              <h1 className="text-xl font-bold text-[#1e3a5f]">Demande transmise aux RH</h1>
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
+                Votre compte n&apos;est pas encore ouvert. Un agent des Ressources Humaines doit
+                vérifier votre identité.
+              </p>
             </>
           )}
         </div>
@@ -257,13 +350,44 @@ export default function ActivatePage() {
 
         {step === 'verification' && session && (
           <form onSubmit={handleVerify} className="space-y-4">
-            <DateInput
-              label="Date de recrutement"
-              value={recruitmentDate}
-              onChange={setRecruitmentDate}
-              labelClassName="block text-sm font-medium text-gray-700 mb-1"
-              inputClassName="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
-            />
+            <div className="grid grid-cols-2 gap-2">
+              <ModeButton active={dateMode === 'full'} onClick={() => setDateMode('full')}>
+                Date exacte
+              </ModeButton>
+              <ModeButton active={dateMode === 'year'} onClick={() => setDateMode('year')}>
+                Année seulement
+              </ModeButton>
+            </div>
+
+            {dateMode === 'full' ? (
+              <DateInput
+                label="Date de recrutement"
+                value={recruitmentDate}
+                onChange={setRecruitmentDate}
+                labelClassName="block text-sm font-medium text-gray-700 mb-1"
+                inputClassName="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+              />
+            ) : (
+              <div>
+                <label htmlFor="declared-year" className="block text-sm font-medium text-gray-700 mb-1">
+                  Année de recrutement
+                </label>
+                <select
+                  id="declared-year"
+                  value={declaredYear}
+                  onChange={(e) => setDeclaredYear(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                >
+                  <option value="">Choisissez une année</option>
+                  {yearOptions().map((year) => (
+                    <option key={year} value={String(year)}>
+                      {year}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">L&apos;année suffit : le jour et le mois ne sont pas vérifiés.</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Vérification anti-robot</label>
@@ -315,7 +439,49 @@ export default function ActivatePage() {
             >
               ← Retour
             </button>
+
+            <div className="border-t border-gray-100 pt-4">
+              <p className="text-xs text-gray-500 text-center mb-2">
+                Impossible de vous rappeler&nbsp;? Les Ressources Humaines peuvent vérifier votre
+                identité au guichet et ouvrir votre compte.
+              </p>
+              <button
+                type="button"
+                onClick={handleRequestReview}
+                disabled={isSubmitting}
+                className="w-full rounded-lg border border-[#1e3a5f] text-[#1e3a5f] py-2.5 text-sm font-semibold hover:bg-blue-50 transition disabled:opacity-60"
+              >
+                {isSubmitting ? 'Envoi en cours...' : "Demander la vérification aux RH"}
+              </button>
+            </div>
           </form>
+        )}
+
+        {step === 'review_requested' && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Votre référence</p>
+              <p className="text-2xl font-bold text-[#1e3a5f] mt-1 select-all">{reviewReference}</p>
+            </div>
+
+            <ol className="text-sm text-gray-700 space-y-2 list-decimal pl-5">
+              <li>Notez ou gardez cette page ouverte.</li>
+              <li>
+                Présentez-vous aux Ressources Humaines avec cette référence et votre matricule
+                {' '}
+                <strong>{matricule.trim()}</strong>.
+              </li>
+              <li>Dès leur validation, votre compte s&apos;ouvre avec le mot de passe que vous avez choisi.</li>
+            </ol>
+
+            <button
+              type="button"
+              onClick={() => navigate('/login')}
+              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
+            >
+              Aller à la connexion
+            </button>
+          </div>
         )}
 
         <div className="text-center mt-5">
@@ -325,6 +491,31 @@ export default function ActivatePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+        active
+          ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
+          : 'border-gray-300 bg-white text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -6,7 +6,25 @@ import {
   logout as apiLogout,
 } from '../api/auth';
 import type { AuthUser, LoginPayload, VerifyActivationPayload } from '../api/auth';
-import { TOKEN_STORAGE_KEY } from '../api/client';
+import { isUnauthorizedError, TOKEN_STORAGE_KEY } from '../api/client';
+
+const USER_STORAGE_KEY = 'kithrm_auth_user';
+
+function rememberUser(user: AuthUser | null) {
+  if (user) localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+  else localStorage.removeItem(USER_STORAGE_KEY);
+}
+
+/** Identité de la dernière connexion réussie, pour ne pas déconnecter une agent hors ligne. */
+function cachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed.id === 'number' ? (parsed as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -35,8 +53,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const me = await fetchMe();
         setUser(me);
-      } catch {
-        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        rememberUser(me);
+      } catch (error) {
+        // Une coupure réseau ne doit pas effacer la session : sans cela, la
+        // moindre micro-coupure renvoyait l'agent à l'écran de connexion.
+        if (isUnauthorizedError(error)) {
+          localStorage.removeItem(TOKEN_STORAGE_KEY);
+          rememberUser(null);
+        } else {
+          setUser(cachedUser());
+        }
       } finally {
         setIsLoading(false);
       }
@@ -47,12 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { token, user: loggedInUser } = await apiLogin(payload);
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setUser(loggedInUser);
+    rememberUser(loggedInUser);
   }
 
   async function completeActivation(payload: VerifyActivationPayload) {
     const { token, user: activatedUser } = await apiVerifyActivation(payload);
     localStorage.setItem(TOKEN_STORAGE_KEY, token);
     setUser(activatedUser);
+    rememberUser(activatedUser);
   }
 
   async function logout() {
@@ -62,6 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // même si l'appel échoue, on déconnecte localement
     } finally {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+      rememberUser(null);
       setUser(null);
     }
   }

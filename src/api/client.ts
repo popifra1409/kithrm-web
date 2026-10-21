@@ -3,6 +3,23 @@ import type { AxiosError, AxiosInstance } from 'axios';
 
 export const TOKEN_STORAGE_KEY = 'kithrm_auth_token';
 
+// Signalé à chaque réponse : `navigator.onLine` ignore les fausses connexions
+// (Wi-Fi associé mais sans sortie, portail captif, DNS mort).
+export const NETWORK_DOWN_EVENT = 'kithrm:network-down';
+export const NETWORK_UP_EVENT = 'kithrm:network-up';
+
+function announceReachability(reachable: boolean) {
+  window.dispatchEvent(new Event(reachable ? NETWORK_UP_EVENT : NETWORK_DOWN_EVENT));
+}
+
+export function isUnauthorizedError(error: unknown): boolean {
+  return axios.isAxiosError(error) && error.response?.status === 401;
+}
+
+export function isNetworkError(error: unknown): boolean {
+  return axios.isAxiosError(error) && !error.response;
+}
+
 export const apiClient: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
   timeout: 15000,
@@ -20,15 +37,20 @@ apiClient.interceptors.request.use((config) => {
 });
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    announceReachability(true);
+    return response;
+  },
   (error) => {
+    if (isNetworkError(error)) announceReachability(false);
+
     // Session expirée ou révoquée : on ne redirige que si la requête échouée
     // était authentifiée. Les 401 des écrans publics (mot de passe temporaire
     // erroné à l'activation, identifiants de connexion) ne doivent PAS renvoyer
     // l'utilisateur vers /login et lui faire perdre sa saisie.
     const wasAuthenticated = Boolean(error?.config?.headers?.Authorization);
 
-    if (axios.isAxiosError(error) && error.response?.status === 401 && wasAuthenticated) {
+    if (isUnauthorizedError(error) && wasAuthenticated) {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';

@@ -1,15 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchCurrentCensus,
   submitCensus,
   buildInitialDraft,
 } from '../api/census';
 import type { CensusDraft, CensusCurrentResponse, CensusDraftDependent, CensusDraftDiploma } from '../api/census';
-import { extractApiError } from '../api/client';
+import { extractApiError, isNetworkError } from '../api/client';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 import DateInput from '../components/DateInput';
 import { isoToFr } from '../lib/dates';
 import { computeCascade } from '../lib/organization';
+import { clearCensusDraft, loadCensusDraft, saveCensusDraft } from '../lib/censusDraftStore';
+import { useConnection } from '../lib/connection';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   spouse: 'Conjoint(e)',
@@ -58,11 +60,17 @@ const nameOf = (list: { id: number; name: string }[] | undefined, id: string) =>
   (id && list?.find((x) => String(x.id) === id)?.name) || '';
 
 export default function CensusPage() {
+  const { online } = useConnection();
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
   const [draft, setDraft] = useState<CensusDraft | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [step, setStep] = useState<Step>('edit');
+  const [restoredAt, setRestoredAt] = useState<string | null>(null);
+  const [draftSavedOffline, setDraftSavedOffline] = useState(false);
+
+  // Brouillon tel que renvoyé par le serveur : sert à savoir si l'agent a vraiment modifié quelque chose.
+  const pristineRef = useRef<CensusDraft | null>(null);
 
   const [editingDependentIndex, setEditingDependentIndex] = useState<number | null | 'new'>(null);
   const [editingDiplomaIndex, setEditingDiplomaIndex] = useState<number | null | 'new'>(null);
@@ -71,14 +79,52 @@ export default function CensusPage() {
     load();
   }, []);
 
+  // Toute modification est recopiée sur l'appareil : une coupure réseau au milieu
+  // de la saisie (photos comprises) ne doit rien faire perdre.
+  useEffect(() => {
+    const campaign = current?.campaign;
+    if (!campaign || !draft) return;
+    if (JSON.stringify(draft) === JSON.stringify(pristineRef.current)) return;
+
+    const timer = setTimeout(() => {
+      saveCensusDraft({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        savedAt: new Date().toISOString(),
+        draft,
+      }).then(() => setDraftSavedOffline(true));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [draft, current?.campaign]);
+
   async function load() {
     setIsLoading(true);
+    setDraftSavedOffline(false);
     try {
       const data = await fetchCurrentCensus();
       setCurrent(data);
-      if (data.campaign) setDraft(buildInitialDraft(data));
+      if (!data.campaign) return;
+
+      const fresh = buildInitialDraft(data);
+      pristineRef.current = fresh;
+
+      const stored = await loadCensusDraft();
+      if (
+        stored &&
+        stored.campaignId === data.campaign.id &&
+        JSON.stringify(stored.draft) !== JSON.stringify(fresh)
+      ) {
+        setDraft(stored.draft);
+        setRestoredAt(stored.savedAt);
+      } else {
+        setDraft(fresh);
+      }
     } catch (error) {
-      alert(extractApiError(error).message);
+      if (isNetworkError(error)) {
+        setDraftSavedOffline(Boolean(await loadCensusDraft()));
+      } else {
+        alert(extractApiError(error).message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -194,9 +240,20 @@ export default function CensusPage() {
   async function handleConfirmSubmit() {
     if (!current?.campaign || !draft) return;
 
+    if (!online) {
+      alert(
+        'Connexion internet introuvable : rien ne peut être envoyé pour le moment. Ton brouillon est enregistré sur cet appareil, tu pourras soumettre dès que le réseau revient.'
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await submitCensus(current.campaign.id, draft);
+      await clearCensusDraft();
+      pristineRef.current = null;
+      setRestoredAt(null);
+      setDraftSavedOffline(false);
       alert('Votre recensement a été soumis pour validation.');
       setStep('edit');
       load();
@@ -205,6 +262,13 @@ export default function CensusPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  async function discardRestoredDraft() {
+    await clearCensusDraft();
+    setRestoredAt(null);
+    setDraftSavedOffline(false);
+    if (pristineRef.current) setDraft(pristineRef.current);
   }
 
   if (isLoading) {
@@ -216,6 +280,25 @@ export default function CensusPage() {
   }
 
   if (!current?.campaign) {
+    if (draftSavedOffline) {
+      return (
+        <div className="max-w-md mx-auto p-8 text-center">
+          <p className="text-4xl mb-3">📶</p>
+          <h1 className="text-lg font-bold text-[#1e3a5f]">Connexion internet nécessaire</h1>
+          <p className="text-sm text-gray-600 mt-2">
+            Impossible d'ouvrir la campagne de recensement sans réseau. Ton brouillon est
+            enregistré sur cet appareil et rien n'est perdu.
+          </p>
+          <button
+            onClick={load}
+            className="mt-5 w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
+          >
+            Réessayer
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div className="p-10 text-center text-gray-500">
         <p className="text-4xl mb-3">📋</p>
@@ -387,14 +470,20 @@ export default function CensusPage() {
           </button>
           <button
             onClick={handleConfirmSubmit}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !online}
             className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60"
           >
-            {isSubmitting ? 'Envoi...' : 'Confirmer et Soumettre'}
+            {isSubmitting ? 'Envoi...' : online ? 'Confirmer et Soumettre' : 'Hors ligne — envoi impossible'}
           </button>
         </div>
+        {!online && (
+          <p className="text-xs text-red-600 text-center mt-2">
+            Le réseau est revenu ? Le bouton se réactive tout seul. Ton brouillon reste sur cet appareil.
+          </p>
+        )}
         <p className="text-xs text-gray-400 text-center mt-3">
-          ⚠️ Ne rechargez pas cette page avant d'avoir soumis, vous perdriez vos modifications.
+          ✏️ Ton brouillon est enregistré sur cet appareil à chaque modification : tu peux fermer la page
+          ou perdre la connexion, rien n'est perdu.
         </p>
       </div>
     );
@@ -418,6 +507,24 @@ export default function CensusPage() {
           <p className="font-semibold text-sm text-amber-800">↩️ {current.stage_label ?? 'Recensement annulé par les RH'}</p>
           {current.cancellation_reason && <p className="text-sm text-amber-700 mt-1">{current.cancellation_reason}</p>}
           <p className="text-xs text-amber-600 mt-1 italic">Vérifiez vos informations ci-dessous et resoumettez.</p>
+        </div>
+      )}
+
+      {restoredAt && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <p className="font-semibold text-sm text-blue-800">📝 Brouillon retrouvé sur cet appareil</p>
+            <p className="text-xs text-blue-700 mt-1">
+              Enregistré le {new Date(restoredAt).toLocaleString('fr-FR')}. Tes saisies ont été
+              conservées et tu peux continuer directement.
+            </p>
+          </div>
+          <button
+            onClick={discardRestoredDraft}
+            className="text-xs font-semibold text-blue-800 border border-blue-300 rounded-lg px-3 py-2 hover:bg-blue-100 shrink-0"
+          >
+            Repartir des données du serveur
+          </button>
         </div>
       )}
 

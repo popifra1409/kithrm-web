@@ -58,6 +58,20 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
   return data;
 }
 
+export interface ActivationReviewPayload {
+  verification_token: string;
+  captcha_id: string;
+  captcha_answer: number;
+  /** Date (ou année, côté interface) que l'employé croit se rappeler, pour l'agent RH. */
+  self_declared_date?: string;
+}
+
+export interface ActivationReviewResponse {
+  message: string;
+  reference: string;
+  expires_at: string | null;
+}
+
 /** Activation, étape 1/2 : vérifie les identifiants, ne connecte PAS encore l'employé. */
 export async function startActivation(payload: ActivatePayload): Promise<ActivationStartResponse> {
   const { data } = await apiClient.post<ActivationStartResponse>('/auth/activate', payload);
@@ -75,6 +89,17 @@ export async function refreshActivationCaptcha(verificationToken: string): Promi
 /** Activation, étape 2/2 : date de recrutement + calcul. Active le compte et connecte. */
 export async function verifyActivation(payload: VerifyActivationPayload): Promise<AuthResponse> {
   const { data } = await apiClient.post<AuthResponse>('/auth/activate/verify', payload);
+  return data;
+}
+
+/**
+ * Secours quand l'employé ne connaît pas sa date : enregistre une demande que les
+ * RH valident au guichet. Retourne la référence à présenter.
+ */
+export async function requestActivationReview(
+  payload: ActivationReviewPayload
+): Promise<ActivationReviewResponse> {
+  const { data } = await apiClient.post<ActivationReviewResponse>('/auth/activate/request', payload);
   return data;
 }
 

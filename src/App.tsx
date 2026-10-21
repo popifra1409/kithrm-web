@@ -15,12 +15,15 @@ import AddDependentPage from './pages/AddDependentPage';
 import DiplomasPage from './pages/DiplomasPage';
 import AddDiplomaPage from './pages/AddDiplomaPage';
 import CensusPage from './pages/CensusPage';
+import NotFoundPage from './pages/NotFoundPage';
+import ConnectionBanner from './components/ConnectionBanner';
 
 export default function App() {
   return (
     <BrowserRouter>
       <AppInfoProvider>
         <AuthProvider>
+          <ConnectionBanner />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/activate" element={<ActivatePage />} />
@@ -43,6 +46,8 @@ export default function App() {
               <Route path="/diplomas/new" element={<AddDiplomaPage />} />
               <Route path="/census" element={<CensusPage />} />
             </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </AuthProvider>
       </AppInfoProvider>
