@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchCurrentCensus,
   submitCensus,
@@ -11,7 +11,9 @@ import DateInput from '../components/DateInput';
 import { isoToFr } from '../lib/dates';
 import { computeCascade } from '../lib/organization';
 import { clearCensusDraft, loadCensusDraft, saveCensusDraft } from '../lib/censusDraftStore';
+import type { DraftStage } from '../lib/censusDraftStore';
 import { useConnection } from '../lib/connection';
+import { useAuth } from '../context/AuthContext';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   spouse: 'Conjoint(e)',
@@ -51,7 +53,72 @@ const EMPTY_DIPLOMA: CensusDraftDiploma = {
   document: null,
 };
 
-type Step = 'edit' | 'review';
+type Stage = DraftStage | 'review';
+
+/**
+ * Le formulaire complet tient sur une quinzaine d'écrans : il est découpé en étapes
+ * thématiques, mais la navigation reste libre (aucun champ ne bloque « Continuer »)
+ * pour que l'employé repasse où il veut sans être retenu.
+ */
+const FORM_STAGES: { key: Stage; label: string }[] = [
+  { key: 'identity', label: 'Identité' },
+  { key: 'pay', label: 'Solde & contrat' },
+  { key: 'org', label: 'Affectation' },
+  { key: 'family', label: 'Entourage' },
+];
+
+/**
+ * À quelle étape se trouve chacun des champs que les RH peuvent renvoyer.
+ * Les clés viennent du catalogue serveur (CensusSubmission::correctableFields()).
+ */
+const FIELD_STAGES: Record<string, DraftStage> = {
+  matricule_fonction_publique: 'identity',
+  last_name: 'identity',
+  first_name: 'identity',
+  gender: 'identity',
+  birth_date: 'identity',
+  marital_status: 'identity',
+  id_card_number: 'identity',
+  children_under_6: 'identity',
+  total_children: 'identity',
+  recruitment_date: 'identity',
+  service_start_date: 'identity',
+  phone: 'identity',
+  email: 'identity',
+  address: 'identity',
+  city: 'identity',
+  photo: 'identity',
+  category_number: 'pay',
+  echelon_number: 'pay',
+  contract_number: 'pay',
+  contract_document: 'pay',
+  service_start_document: 'pay',
+  bank_name: 'pay',
+  bank_account_number: 'pay',
+  cnps_number: 'pay',
+  declared_branch_type: 'org',
+  declared_direction_id: 'org',
+  declared_department_id: 'org',
+  declared_sub_direction_id: 'org',
+  declared_service_id: 'org',
+  declared_sector_id: 'org',
+  declared_trade_body_id: 'org',
+  declared_qualification_id: 'org',
+  declared_job_title_id: 'org',
+  declared_personnel_type: 'org',
+  declared_administrative_status: 'org',
+  dependents: 'family',
+  diplomas: 'family',
+};
+
+/** Étape de la première correction demandée : c'est là que l'agent ouvre le formulaire. */
+function firstFlaggedStage(fields: { key: string }[] | undefined): DraftStage | null {
+  for (const field of fields ?? []) {
+    const stage = FIELD_STAGES[field.key];
+    if (stage) return stage;
+  }
+  return null;
+}
 
 const toOptions = (list: { id: number; name: string }[]) =>
   list.map((x) => ({ value: String(x.id), label: x.name }));
@@ -61,13 +128,16 @@ const nameOf = (list: { id: number; name: string }[] | undefined, id: string) =>
 
 export default function CensusPage() {
   const { online } = useConnection();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
   const [draft, setDraft] = useState<CensusDraft | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [step, setStep] = useState<Step>('edit');
+  const [stage, setStage] = useState<Stage>('identity');
+  const [stageBeforeReview, setStageBeforeReview] = useState<DraftStage>('identity');
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [draftSavedOffline, setDraftSavedOffline] = useState(false);
+  const [bankAckFor, setBankAckFor] = useState<string | null>(null);
 
   // Brouillon tel que renvoyé par le serveur : sert à savoir si l'agent a vraiment modifié quelque chose.
   const pristineRef = useRef<CensusDraft | null>(null);
@@ -79,23 +149,50 @@ export default function CensusPage() {
     load();
   }, []);
 
-  // Toute modification est recopiée sur l'appareil : une coupure réseau au milieu
-  // de la saisie (photos comprises) ne doit rien faire perdre.
+  // Le récapitulatif n'est jamais mémorisé : c'est l'étape d'où l'employé est parti
+  // qu'il retrouvera s'il ferme l'onglet ou se déconnecte.
+  const editStage: DraftStage = stage === 'review' ? stageBeforeReview : stage;
+
+  /**
+   * Copie immédiate du brouillon sur l'appareil, étape comprise : une déconnexion,
+   * une coupure réseau ou un poste éteint ne doit faire perdre aucune saisie visible.
+   */
+  const persistDraft = useCallback(
+    async (stageToSave: DraftStage) => {
+      const campaign = current?.campaign;
+      if (!campaign || !draft || !user) return;
+
+      await saveCensusDraft({
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        userId: user.id,
+        stage: stageToSave,
+        savedAt: new Date().toISOString(),
+        draft,
+      });
+      setDraftSavedOffline(true);
+    },
+    [current?.campaign, draft, user]
+  );
+
+  // Toute modification est recopiée sur l'appareil (photos comprises) ; le court
+  // délai sert uniquement à ne pas écrire à chaque frappe au clavier.
   useEffect(() => {
-    const campaign = current?.campaign;
-    if (!campaign || !draft) return;
+    if (stage === 'review' || !draft) return;
     if (JSON.stringify(draft) === JSON.stringify(pristineRef.current)) return;
 
     const timer = setTimeout(() => {
-      saveCensusDraft({
-        campaignId: campaign.id,
-        campaignName: campaign.name,
-        savedAt: new Date().toISOString(),
-        draft,
-      }).then(() => setDraftSavedOffline(true));
+      void persistDraft(stage);
     }, 400);
     return () => clearTimeout(timer);
-  }, [draft, current?.campaign]);
+  }, [persistDraft, draft, stage]);
+
+  // L'onglet est fermé en pleine saisie : la dernière écriture part aussitôt.
+  useEffect(() => {
+    const flush = () => void persistDraft(editStage);
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, [persistDraft, editStage]);
 
   async function load() {
     setIsLoading(true);
@@ -109,15 +206,20 @@ export default function CensusPage() {
       pristineRef.current = fresh;
 
       const stored = await loadCensusDraft();
-      if (
-        stored &&
-        stored.campaignId === data.campaign.id &&
-        JSON.stringify(stored.draft) !== JSON.stringify(fresh)
-      ) {
-        setDraft(stored.draft);
-        setRestoredAt(stored.savedAt);
+      // Une correction demandée prime sur l'étape mémorisée : l'agent tombe direct
+      // sur le premier champ que les RH lui reprochent.
+      const flaggedStage = firstFlaggedStage(data.rejection_fields);
+
+      // Un brouillon qui ne vient pas de cet employé ou de cette campagne n'est ni
+      // affiché ni écrasé : son propriétaire le retrouvera à sa prochaine connexion.
+      if (stored && stored.campaignId === data.campaign.id && stored.userId === user?.id) {
+        const changed = JSON.stringify(stored.draft) !== JSON.stringify(fresh);
+        setDraft(changed ? stored.draft : fresh);
+        if (changed) setRestoredAt(stored.savedAt);
+        setStage(flaggedStage ?? stored.stage);
       } else {
         setDraft(fresh);
+        if (flaggedStage) setStage(flaggedStage);
       }
     } catch (error) {
       if (isNetworkError(error)) {
@@ -131,6 +233,47 @@ export default function CensusPage() {
   }
 
   const salaryClassification = current?.current_data?.salary_classification;
+
+  // Champs renvoyés par les RH : surlignés et listés, mais jamais bloquants.
+  const flaggedFields = useMemo(
+    () => new Set((current?.rejection_fields ?? []).map((f) => f.key)),
+    [current?.rejection_fields]
+  );
+
+  // Les étapes qui contiennent au moins une correction demandée, pour le repère rouge.
+  const flaggedStages = useMemo(() => {
+    const stages = new Set<DraftStage>();
+    for (const field of current?.rejection_fields ?? []) {
+      const stage = FIELD_STAGES[field.key];
+      if (stage) stages.add(stage);
+    }
+    return stages;
+  }, [current?.rejection_fields]);
+
+  /**
+   * Coordonnées bancaires/CNPS différentes de la fiche : le serveur refusera la
+   * soumission tant que l'avertissement sur le virement du salaire n'a pas été acté.
+   */
+  const bankChanges = useMemo(() => {
+    const recorded = current?.current_data?.personal;
+    if (!draft || !recorded) return [];
+
+    const candidates: { key: 'bank_name' | 'bank_account_number' | 'cnps_number'; label: string }[] = [
+      { key: 'bank_name', label: 'nom de la banque' },
+      { key: 'bank_account_number', label: 'numéro de compte' },
+      { key: 'cnps_number', label: 'numéro CNPS' },
+    ];
+
+    return candidates.filter(({ key }) => {
+      const submitted = draft.personal[key].trim();
+      return submitted !== '' && submitted !== (recorded[key] ?? '').trim();
+    });
+  }, [draft?.personal.bank_name, draft?.personal.bank_account_number, draft?.personal.cnps_number, current?.current_data]);
+
+  // La reconnaissance porte sur le jeu exact de champs modifiés : toute nouvelle
+  // modification des coordonnées invalide l'accord précédent.
+  const bankChangesSignature = bankChanges.map((c) => c.key).join(',');
+  const bankChangeAck = bankAckFor === bankChangesSignature;
 
   const indicePreview = useMemo(() => {
     if (!salaryClassification || !draft) return null;
@@ -233,7 +376,32 @@ export default function CensusPage() {
       return;
     }
 
-    setStep('review');
+    if (bankChanges.length > 0 && !bankChangeAck) {
+      setStage('pay');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      alert(
+        `Tu as modifié ${bankChanges.map((c) => c.label).join(', ')}. Coche la reconnaissance de l'avertissement dans la section « Informations Bancaires & CNPS » avant de vérifier et soumettre.`
+      );
+      return;
+    }
+
+    setStageBeforeReview(editStage);
+    setStage('review');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /**
+   * Changement d'étape : la saisie en cours est d'abord écrite sur l'appareil, sans
+   * attendre le minuteur. La navigation reste libre, aucun champ ne bloque.
+   */
+  async function goTo(next: Stage) {
+    await persistDraft(next === 'review' ? editStage : next);
+
+    if (next === 'review') {
+      handleGoToReview();
+      return;
+    }
+    setStage(next);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -249,13 +417,14 @@ export default function CensusPage() {
 
     setIsSubmitting(true);
     try {
-      await submitCensus(current.campaign.id, draft);
+      await submitCensus(current.campaign.id, draft, bankChangeAck);
       await clearCensusDraft();
       pristineRef.current = null;
       setRestoredAt(null);
       setDraftSavedOffline(false);
+      setBankAckFor(null);
       alert('Votre recensement a été soumis pour validation.');
-      setStep('edit');
+      setStage('identity');
       load();
     } catch (error) {
       alert(extractApiError(error).message);
@@ -268,6 +437,7 @@ export default function CensusPage() {
     await clearCensusDraft();
     setRestoredAt(null);
     setDraftSavedOffline(false);
+    setStage('identity');
     if (pristineRef.current) setDraft(pristineRef.current);
   }
 
@@ -345,7 +515,7 @@ export default function CensusPage() {
     ? salaryClassification.echelon_options_by_category[draft.personal.category_number] ?? {}
     : {};
 
-  if (step === 'review') {
+  if (stage === 'review') {
     const activeDependents = draft.dependents.filter((d) => !d.removed);
     const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
 
@@ -397,6 +567,12 @@ export default function CensusPage() {
           <RecapRow label="Banque" value={draft.personal.bank_name} />
           <RecapRow label="N° de compte" value={draft.personal.bank_account_number} />
           <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
+          {bankChanges.length > 0 && (
+            <p className="text-xs text-amber-700 mt-2">
+              ⚠️ Changement déclaré : {bankChanges.map((c) => c.label).join(', ')}. Avertissement sur le virement acté
+              — une demande de modification des informations bancaires doit accompagner le dossier.
+            </p>
+          )}
         </Section>
 
         <Section title="Affectation Organisationnelle">
@@ -462,7 +638,7 @@ export default function CensusPage() {
 
         <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <button
-            onClick={() => setStep('edit')}
+            onClick={() => goTo(stageBeforeReview)}
             disabled={isSubmitting}
             className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
           >
@@ -489,6 +665,10 @@ export default function CensusPage() {
     );
   }
 
+  const stageIndex = FORM_STAGES.findIndex((s) => s.key === stage);
+  const prevStage = stageIndex > 0 ? FORM_STAGES[stageIndex - 1].key : null;
+  const nextStage = stageIndex < FORM_STAGES.length - 1 ? FORM_STAGES[stageIndex + 1] : null;
+
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8">
       <h1 className="text-lg font-bold text-[#1e3a5f]">{current.campaign.name}</h1>
@@ -498,7 +678,27 @@ export default function CensusPage() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
           <p className="font-semibold text-sm text-red-800">❌ {current.stage_label}</p>
           {current.rejection_reason && <p className="text-sm text-red-700 mt-1">{current.rejection_reason}</p>}
-          <p className="text-xs text-red-600 mt-1 italic">Corrigez ci-dessous et resoumettez.</p>
+          {(current.rejection_fields ?? []).length > 0 && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold text-red-700">Champs à corriger (clique pour y aller) :</p>
+              <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                {current.rejection_fields!.map((field) => (
+                  <li key={field.key}>
+                    <button
+                      type="button"
+                      onClick={() => goTo(FIELD_STAGES[field.key] ?? 'identity')}
+                      className="text-[11px] font-semibold text-red-700 bg-white border border-red-200 rounded-full px-2.5 py-1 hover:bg-red-100"
+                    >
+                      {field.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <p className="text-xs text-red-600 mt-2 italic">
+            Les champs concernés sont surlignés en rouge ci-dessous. Corrigez-les et resoumettez.
+          </p>
         </div>
       )}
 
@@ -528,7 +728,9 @@ export default function CensusPage() {
         </div>
       )}
 
-      <Section title="Photo">
+      <StageNav stage={stage} onPick={goTo} flaggedStages={flaggedStages} />
+
+      <Section title="Photo" showIf={stage === 'identity'} flagged={flaggedFields.has('photo')}>
         <PhotoCaptureInput
           label="Photo de profil"
           file={draft.photo}
@@ -542,17 +744,38 @@ export default function CensusPage() {
         )}
       </Section>
 
-      <Section title="Informations Personnelles">
+      <Section
+        title="Informations Personnelles"
+        showIf={stage === 'identity'}
+        flagged={
+          flaggedFields.has('matricule_fonction_publique') ||
+          flaggedFields.has('last_name') ||
+          flaggedFields.has('first_name') ||
+          flaggedFields.has('gender') ||
+          flaggedFields.has('birth_date') ||
+          flaggedFields.has('marital_status') ||
+          flaggedFields.has('id_card_number') ||
+          flaggedFields.has('children_under_6') ||
+          flaggedFields.has('total_children') ||
+          flaggedFields.has('recruitment_date') ||
+          flaggedFields.has('service_start_date') ||
+          flaggedFields.has('phone') ||
+          flaggedFields.has('email') ||
+          flaggedFields.has('address') ||
+          flaggedFields.has('city')
+        }
+      >
         <div className="space-y-3">
           <Field
             label="Matricule Fonction Publique"
             value={draft.personal.matricule_fonction_publique}
             onChange={(v) => updatePersonal('matricule_fonction_publique', v)}
             onBlur={() => updatePersonal('matricule_fonction_publique', draft.personal.matricule_fonction_publique.trim())}
+            flagged={flaggedFields.has('matricule_fonction_publique')}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} />
-            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} />
+            <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} flagged={flaggedFields.has('last_name')} />
+            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} flagged={flaggedFields.has('first_name')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
@@ -560,8 +783,14 @@ export default function CensusPage() {
               value={draft.personal.gender}
               onChange={(v) => updatePersonal('gender', v)}
               options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }]}
+              flagged={flaggedFields.has('gender')}
             />
-            <DateInput label="Date de naissance" value={draft.personal.birth_date} onChange={(v) => updatePersonal('birth_date', v)} />
+            <DateInput
+              label="Date de naissance"
+              value={draft.personal.birth_date}
+              onChange={(v) => updatePersonal('birth_date', v)}
+              flagged={flaggedFields.has('birth_date')}
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
@@ -574,25 +803,45 @@ export default function CensusPage() {
                 { value: 'divorced', label: 'Divorcé(e)' },
                 { value: 'widowed', label: 'Veuf/Veuve' },
               ]}
+              flagged={flaggedFields.has('marital_status')}
             />
-            <Field label="N° Carte d'identité" value={draft.personal.id_card_number} onChange={(v) => updatePersonal('id_card_number', v)} />
+            <Field
+              label="N° Carte d'identité"
+              value={draft.personal.id_card_number}
+              onChange={(v) => updatePersonal('id_card_number', v)}
+              flagged={flaggedFields.has('id_card_number')}
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Enfants < 6 ans" value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" />
-            <Field label="Total enfants" value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" />
+            <Field label="Enfants < 6 ans" value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" flagged={flaggedFields.has('children_under_6')} />
+            <Field label="Total enfants" value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" flagged={flaggedFields.has('total_children')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <DateInput label="Date de recrutement" value={draft.personal.recruitment_date} onChange={(v) => updatePersonal('recruitment_date', v)} />
-            <DateInput label="Date de prise de service" value={draft.personal.service_start_date} onChange={(v) => updatePersonal('service_start_date', v)} />
+            <DateInput
+              label="Date de recrutement"
+              value={draft.personal.recruitment_date}
+              onChange={(v) => updatePersonal('recruitment_date', v)}
+              flagged={flaggedFields.has('recruitment_date')}
+            />
+            <DateInput
+              label="Date de prise de service"
+              value={draft.personal.service_start_date}
+              onChange={(v) => updatePersonal('service_start_date', v)}
+              flagged={flaggedFields.has('service_start_date')}
+            />
           </div>
-          <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} />
-          <Field label="Email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} />
-          <Field label="Adresse" value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} />
-          <Field label="Ville" value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} />
+          <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} flagged={flaggedFields.has('phone')} />
+          <Field label="Email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
+          <Field label="Adresse" value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} flagged={flaggedFields.has('address')} />
+          <Field label="Ville" value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} flagged={flaggedFields.has('city')} />
         </div>
       </Section>
 
-      <Section title="Classification Salariale">
+      <Section
+        title="Classification Salariale"
+        showIf={stage === 'pay'}
+        flagged={flaggedFields.has('category_number') || flaggedFields.has('echelon_number')}
+      >
         <p className="text-xs text-gray-500 mb-3">
           {salaryClassification.classification_type === 'cameroon'
             ? 'Nomenclature camerounaise (fonctionnaires).'
@@ -608,12 +857,14 @@ export default function CensusPage() {
               updatePersonal('echelon_number', '');
             }}
             options={Object.entries(salaryClassification.category_options).map(([value, label]) => ({ value, label }))}
+            flagged={flaggedFields.has('category_number')}
           />
           <SelectField
             label="Échelon"
             value={draft.personal.echelon_number}
             onChange={(v) => updatePersonal('echelon_number', v)}
             options={Object.entries(echelonOptions).map(([value, label]) => ({ value, label }))}
+            flagged={flaggedFields.has('echelon_number')}
           />
         </div>
         <div className="p-3 rounded-lg bg-blue-50 text-sm text-blue-800">
@@ -621,7 +872,15 @@ export default function CensusPage() {
         </div>
       </Section>
 
-      <Section title="Contrat de travail & prise de service">
+      <Section
+        title="Contrat de travail & prise de service"
+        showIf={stage === 'pay'}
+        flagged={
+          flaggedFields.has('contract_number') ||
+          flaggedFields.has('contract_document') ||
+          flaggedFields.has('service_start_document')
+        }
+      >
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field
@@ -630,6 +889,7 @@ export default function CensusPage() {
               onChange={(v) => patchContract({ contract_number: v })}
               onBlur={() => patchContract({ contract_number: draft.contract.contract_number.trim() })}
               placeholder="Ex: CT-2024-001"
+              flagged={flaggedFields.has('contract_number')}
             />
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">Type de contrat</label>
@@ -644,6 +904,7 @@ export default function CensusPage() {
             label="Contrat de travail (PDF ou image)"
             file={draft.contract.contract_document}
             onChange={(f) => patchContract({ contract_document: f })}
+            flagged={flaggedFields.has('contract_document')}
           />
           {!draft.contract.contract_document && current.current_data?.contract.contract_document_url && (
             <DocumentLink label="📄 Contrat déjà enregistré (joignez un fichier pour le remplacer)" url={current.current_data.contract.contract_document_url} />
@@ -653,6 +914,7 @@ export default function CensusPage() {
             label="Document de prise de service (PDF ou image)"
             file={draft.contract.service_start_document}
             onChange={(f) => patchContract({ service_start_document: f })}
+            flagged={flaggedFields.has('service_start_document')}
           />
           {!draft.contract.service_start_document && current.current_data?.contract.service_start_document_url && (
             <DocumentLink label="📄 Prise de service déjà enregistrée (joignez un fichier pour la remplacer)" url={current.current_data.contract.service_start_document_url} />
@@ -665,15 +927,87 @@ export default function CensusPage() {
         </div>
       </Section>
 
-      <Section title="Informations Bancaires & CNPS">
+      <Section
+        title="Informations Bancaires & CNPS"
+        showIf={stage === 'pay'}
+        flagged={
+          flaggedFields.has('bank_name') ||
+          flaggedFields.has('bank_account_number') ||
+          flaggedFields.has('cnps_number')
+        }
+      >
         <div className="space-y-3">
-          <Field label="Nom de la banque" value={draft.personal.bank_name} onChange={(v) => updatePersonal('bank_name', v)} />
-          <Field label="Numéro de compte" value={draft.personal.bank_account_number} onChange={(v) => updatePersonal('bank_account_number', v)} />
-          <Field label="Numéro CNPS" value={draft.personal.cnps_number} onChange={(v) => updatePersonal('cnps_number', v)} />
+          <Field
+            label="Nom de la banque"
+            value={draft.personal.bank_name}
+            onChange={(v) => updatePersonal('bank_name', v)}
+            flagged={flaggedFields.has('bank_name')}
+          />
+          <Field
+            label="Numéro de compte"
+            value={draft.personal.bank_account_number}
+            onChange={(v) => updatePersonal('bank_account_number', v)}
+            flagged={flaggedFields.has('bank_account_number')}
+          />
+          <Field
+            label="Numéro CNPS"
+            value={draft.personal.cnps_number}
+            onChange={(v) => updatePersonal('cnps_number', v)}
+            flagged={flaggedFields.has('cnps_number')}
+          />
+
+          {bankChanges.length > 0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+              <p className="text-sm font-bold text-amber-900">⚠️ Tu modifies tes coordonnées de paiement</p>
+              <p className="text-xs text-amber-800 mt-1">
+                {bankChanges
+                  .map((c) => `${c.label} → ${current.current_data?.personal[c.key]?.trim() || 'aucune valeur enregistrée'}`)
+                  .join(' · ')}
+              </p>
+              <p className="text-xs text-amber-800 mt-2">
+                Si ces informations ne sont pas celles que la GRH a dans son dossier, <strong>ton salaire ne sera pas
+                viré</strong> tant que la différence n'est pas régularisée. Un changement avéré doit être accompagné
+                d'une <strong>demande de modification des informations bancaires adressée au Directeur Général</strong>
+                (avec un RIB à ton nom joint) : sans ce document, la valeur déjà enregistrée reste la référence.
+              </p>
+              <label className="flex items-start gap-2 mt-3">
+                <input
+                  type="checkbox"
+                  checked={bankChangeAck}
+                  onChange={(e) => setBankAckFor(e.target.checked ? bankChangesSignature : null)}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className="text-xs font-semibold text-amber-900">
+                  J'ai lu cet avertissement et je prépare la demande adressée au Directeur Général.
+                </span>
+              </label>
+              {!bankChangeAck && (
+                <p className="text-[11px] font-semibold text-red-700 mt-1">
+                  Cette case est obligatoire pour pouvoir soumettre.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </Section>
 
-      <Section title="Affectation Organisationnelle">
+      <Section
+        title="Affectation Organisationnelle"
+        showIf={stage === 'org'}
+        flagged={
+          flaggedFields.has('declared_branch_type') ||
+          flaggedFields.has('declared_direction_id') ||
+          flaggedFields.has('declared_department_id') ||
+          flaggedFields.has('declared_sub_direction_id') ||
+          flaggedFields.has('declared_service_id') ||
+          flaggedFields.has('declared_sector_id') ||
+          flaggedFields.has('declared_trade_body_id') ||
+          flaggedFields.has('declared_qualification_id') ||
+          flaggedFields.has('declared_job_title_id') ||
+          flaggedFields.has('declared_personnel_type') ||
+          flaggedFields.has('declared_administrative_status')
+        }
+      >
         <p className="text-xs text-gray-500 mb-3">
           Chaque niveau facultatif (direction, département/sous-direction, unité) ne fait que restreindre la liste
           suivante. Vérifiez bien l'ordre : Direction → Département ou Sous-direction → Service → Unité / Secteur.
@@ -696,6 +1030,12 @@ export default function CensusPage() {
           ))}
         </div>
 
+        {flaggedFields.has('declared_branch_type') && (
+          <div className="-mt-2 mb-3">
+            <CorrectionNote />
+          </div>
+        )}
+
         {cascade && orgOptions && (
           <div className="space-y-3">
             <SelectField
@@ -704,6 +1044,7 @@ export default function CensusPage() {
               onChange={setDirection}
               options={toOptions(cascade.directions)}
               hint="Facultatif : restreint les listes suivantes"
+              flagged={flaggedFields.has('declared_direction_id')}
             />
 
             {draft.organizational.branch_type === 'medical' ? (
@@ -713,6 +1054,7 @@ export default function CensusPage() {
                 onChange={setDepartment}
                 options={toOptions(cascade.departments)}
                 hint="Facultatif : restreint la liste des services"
+                flagged={flaggedFields.has('declared_department_id')}
               />
             ) : (
               <SelectField
@@ -721,6 +1063,7 @@ export default function CensusPage() {
                 onChange={setSubDirection}
                 options={toOptions(cascade.subDirections)}
                 hint="Facultatif : restreint la liste des services"
+                flagged={flaggedFields.has('declared_sub_direction_id')}
               />
             )}
 
@@ -729,6 +1072,7 @@ export default function CensusPage() {
               value={draft.organizational.service_id}
               onChange={setService}
               options={toOptions(cascade.services)}
+              flagged={flaggedFields.has('declared_service_id')}
             />
 
             <SelectField
@@ -737,6 +1081,7 @@ export default function CensusPage() {
               onChange={(v) => patchOrganizational({ sector_id: v })}
               options={toOptions(cascade.sectors)}
               disabled={!draft.organizational.service_id}
+              flagged={flaggedFields.has('declared_sector_id')}
               hint={!draft.organizational.service_id
                 ? "Choisissez d'abord un service"
                 : cascade.sectors.length === 0
@@ -750,6 +1095,7 @@ export default function CensusPage() {
                 value={draft.organizational.trade_body_id}
                 onChange={setTradeBody}
                 options={toOptions(orgOptions.trade_bodies)}
+                flagged={flaggedFields.has('declared_trade_body_id')}
               />
               <SelectField
                 label="Qualification"
@@ -758,6 +1104,7 @@ export default function CensusPage() {
                 options={toOptions(cascade.qualifications)}
                 disabled={!draft.organizational.trade_body_id && !draft.organizational.qualification_id}
                 hint="Choisissez d'abord le corps de métier"
+                flagged={flaggedFields.has('declared_qualification_id')}
               />
               <SelectField
                 label="Poste hiérarchique"
@@ -767,6 +1114,7 @@ export default function CensusPage() {
                   value: String(j.id),
                   label: j.hierarchy_level != null ? `${j.name} (Niveau ${j.hierarchy_level})` : j.name,
                 }))}
+                flagged={flaggedFields.has('declared_job_title_id')}
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <SelectField
@@ -774,12 +1122,14 @@ export default function CensusPage() {
                   value={draft.organizational.personnel_type}
                   onChange={(v) => patchOrganizational({ personnel_type: v })}
                   options={orgOptions.personnel_types}
+                  flagged={flaggedFields.has('declared_personnel_type')}
                 />
                 <SelectField
                   label="Statut administratif"
                   value={draft.organizational.administrative_status}
                   onChange={(v) => patchOrganizational({ administrative_status: v })}
                   options={orgOptions.administrative_statuses}
+                  flagged={flaggedFields.has('declared_administrative_status')}
                 />
               </div>
             </div>
@@ -789,6 +1139,8 @@ export default function CensusPage() {
 
       <Section
         title="Ayants Droit"
+        showIf={stage === 'family'}
+        flagged={flaggedFields.has('dependents')}
         action={
           <button onClick={() => setEditingDependentIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
             + Ajouter
@@ -830,6 +1182,8 @@ export default function CensusPage() {
 
       <Section
         title="Diplômes & Formations"
+        showIf={stage === 'family'}
+        flagged={flaggedFields.has('diplomas')}
         action={
           <button onClick={() => setEditingDiplomaIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
             + Ajouter
@@ -867,14 +1221,24 @@ export default function CensusPage() {
         )}
       </Section>
 
-      <button
-        onClick={handleGoToReview}
-        className="w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 mt-2"
-      >
-        Vérifier et Soumettre
-      </button>
+      <div className="flex flex-col sm:flex-row gap-3 mt-2">
+        <button
+          onClick={() => prevStage && goTo(prevStage)}
+          disabled={!prevStage}
+          className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+        >
+          ← Précédent
+        </button>
+        <button
+          onClick={() => goTo(nextStage ? nextStage.key : 'review')}
+          className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
+        >
+          {nextStage ? `${nextStage.label} →` : 'Vérifier et Soumettre'}
+        </button>
+      </div>
       <p className="text-xs text-gray-400 text-center mt-3">
-        ⚠️ Ne rechargez pas cette page avant d'avoir soumis, vous perdriez vos modifications.
+        ✏️ Tes saisies sont enregistrées sur cet appareil à chaque modification : tu peux fermer la page ou perdre
+        la connexion, rien n'est perdu.
       </p>
 
       {editingDependentIndex !== null && (
@@ -896,15 +1260,85 @@ export default function CensusPage() {
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+function Section({
+  title,
+  action,
+  showIf = true,
+  flagged = false,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  showIf?: boolean;
+  flagged?: boolean;
+  children: React.ReactNode;
+}) {
+  if (!showIf) return null;
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+    <div
+      className={`rounded-xl border p-5 mb-4 ${flagged ? 'border-red-300 bg-red-50/40' : 'bg-white border-gray-200'}`}
+    >
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold text-[#1e3a5f]">{title}</h2>
+        <h2 className="text-sm font-bold text-[#1e3a5f] flex items-center gap-2">
+          {title}
+          {flagged && (
+            <span className="text-[10px] font-bold text-red-700 bg-white border border-red-200 rounded-full px-2 py-0.5">
+              à corriger
+            </span>
+          )}
+        </h2>
         {action}
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * Barre des étapes. Toutes les étapes sont cliquables : aucune saisie ne bloque
+ * le passage à la suivante, l'employé garde la main sur son ordre de remplissage.
+ * Une étape marquée d'un point rouge contient au moins un champ renvoyé par les RH.
+ */
+function StageNav({
+  stage,
+  onPick,
+  flaggedStages,
+}: {
+  stage: Stage;
+  onPick: (s: Stage) => void;
+  flaggedStages: Set<DraftStage>;
+}) {
+  const stages: { key: Stage; label: string }[] = [...FORM_STAGES, { key: 'review', label: 'Récapitulatif' }];
+  const currentIndex = stages.findIndex((s) => s.key === stage);
+
+  return (
+    <nav className="bg-white rounded-xl border border-gray-200 p-2 mb-4">
+      <ol className="flex items-stretch gap-1 overflow-x-auto">
+        {stages.map((s, i) => {
+          const isCurrent = s.key === stage;
+          const isDone = i < currentIndex;
+          const isFlagged = s.key !== 'review' && flaggedStages.has(s.key);
+          return (
+            <li key={s.key} className="flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => onPick(s.key)}
+                aria-current={isCurrent ? 'step' : undefined}
+                className={`w-full rounded-lg px-1.5 py-2 text-[11px] font-semibold leading-tight ${
+                  isCurrent ? 'bg-[#1e3a5f] text-white' : 'text-gray-600 hover:bg-gray-100'
+                } ${isFlagged && !isCurrent ? 'border border-red-300' : ''}`}
+              >
+                <span className={isCurrent ? 'text-white' : isFlagged ? 'text-red-600' : isDone ? 'text-green-600' : 'text-gray-400'}>
+                  {isFlagged ? '●' : isDone ? '✓' : i + 1}
+                </span>{' '}
+                {s.label}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    </nav>
   );
 }
 
@@ -917,7 +1351,33 @@ function RecapRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Field({ label, value, onChange, onBlur, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; onBlur?: () => void; placeholder?: string; type?: string }) {
+const FIELD_CLASS =
+  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]';
+const FLAGGED_CLASS =
+  'w-full rounded-lg border-2 border-red-500 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400';
+
+/** Rappel du motif du renvoi, posé sous chaque champ que les RH ont marqué. */
+function CorrectionNote() {
+  return <p className="text-[11px] font-semibold text-red-600 mt-1">↩️ À corriger — demandé par les RH</p>;
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  type = 'text',
+  flagged = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  onBlur?: () => void;
+  placeholder?: string;
+  type?: string;
+  flagged?: boolean;
+}) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
@@ -927,8 +1387,9 @@ function Field({ label, value, onChange, onBlur, placeholder, type = 'text' }: {
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+        className={flagged ? FLAGGED_CLASS : FIELD_CLASS}
       />
+      {flagged && <CorrectionNote />}
     </div>
   );
 }
@@ -940,6 +1401,7 @@ function SelectField({
   options,
   disabled = false,
   hint,
+  flagged = false,
 }: {
   label: string;
   value: string;
@@ -947,6 +1409,7 @@ function SelectField({
   options: { value: string; label: string }[];
   disabled?: boolean;
   hint?: string;
+  flagged?: boolean;
 }) {
   return (
     <div>
@@ -955,14 +1418,23 @@ function SelectField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] bg-white disabled:bg-gray-100 disabled:text-gray-400"
+        className={
+          flagged
+            ? 'w-full rounded-lg border-2 border-red-500 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400'
+            : `${FIELD_CLASS} bg-white disabled:bg-gray-100 disabled:text-gray-400`
+        }
       >
         <option value="">{disabled && hint ? hint : '—'}</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
-      {!disabled && hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {flagged ? (
+        <CorrectionNote />
+      ) : (
+        !disabled &&
+        hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>
+      )}
     </div>
   );
 }
@@ -1137,12 +1609,28 @@ function DocumentLink({ label, url }: { label: string; url: string }) {
   );
 }
 
-function FileField({ label, file, onChange }: { label: string; file: File | null; onChange: (f: File | null) => void }) {
+function FileField({
+  label,
+  file,
+  onChange,
+  flagged = false,
+}: {
+  label: string;
+  file: File | null;
+  onChange: (f: File | null) => void;
+  flagged?: boolean;
+}) {
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
-      <input type="file" accept="application/pdf,image/*" onChange={(e) => onChange(e.target.files?.[0] ?? null)} className="w-full text-xs" />
+      <input
+        type="file"
+        accept="application/pdf,image/*"
+        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        className={`w-full text-xs ${flagged ? 'rounded-lg border-2 border-red-500 bg-white p-2' : ''}`}
+      />
       {file && <p className="text-xs text-green-700 mt-1">✅ {file.name}</p>}
+      {flagged && <CorrectionNote />}
     </div>
   );
 }

@@ -87,6 +87,8 @@ export interface CensusCurrentResponse {
   submission_status?: CensusSubmissionStatus | null;
   stage_label?: string | null;
   rejection_reason?: string | null;
+  /** Champs que l'étape qui a rejeté demande de corriger (libellé prêt à afficher). */
+  rejection_fields?: { key: string; label: string }[];
   cancellation_reason?: string | null;
   current_data?: {
     personal: {
@@ -286,7 +288,11 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
   };
 }
 
-export async function submitCensus(campaignId: number, draft: CensusDraft): Promise<void> {
+export async function submitCensus(
+  campaignId: number,
+  draft: CensusDraft,
+  bankChangeAcknowledged = false
+): Promise<void> {
   const formData = new FormData();
 
   formData.append(
@@ -312,6 +318,10 @@ export async function submitCensus(campaignId: number, draft: CensusDraft): Prom
   formData.append('personal[bank_name]', draft.personal.bank_name ?? '');
   formData.append('personal[bank_account_number]', draft.personal.bank_account_number ?? '');
   formData.append('personal[cnps_number]', draft.personal.cnps_number ?? '');
+
+  // Le serveur refuse la soumission d'un compte bancaire modifié sans cette
+  // reconnaissance : elle prouve que l'avertissement sur le virement a été lu.
+  if (bankChangeAcknowledged) formData.append('bank_change_acknowledged', '1');
 
   if (draft.photo) formData.append('photo', draft.photo);
 

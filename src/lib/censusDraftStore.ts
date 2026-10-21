@@ -11,9 +11,19 @@ const DB_VERSION = 1;
 const STORE = 'census_draft';
 const RECORD_KEY = 'current';
 
+/** Étapes du formulaire telles qu'elles sont mémorisées sur l'appareil. */
+export type DraftStage = 'identity' | 'pay' | 'org' | 'family';
+
 export interface StoredCensusDraft {
   campaignId: number;
   campaignName: string;
+  /**
+   * Propriétaire du brouillon. Un poste informatique d'hôpital est partagé : sans
+   * cette clé, le collègue suivant retrouverait les saisies (et les photos) d'avant.
+   */
+  userId: number;
+  /** Étape où l'employé s'est arrêté, pour qu'il reprenne exactement là. */
+  stage: DraftStage;
   savedAt: string;
   draft: CensusDraft;
 }

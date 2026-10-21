@@ -8,11 +8,15 @@ interface DateInputProps {
     onChange: (iso: string) => void;
     labelClassName?: string;
     inputClassName?: string;
+    /** Champ renvoyé par les Ressources Humaines : à corriger en priorité. */
+    flagged?: boolean;
 }
 
 const DEFAULT_LABEL = 'block text-xs font-semibold text-gray-500 mb-1';
 const DEFAULT_INPUT =
     'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]';
+const FLAGGED_INPUT =
+    'w-full rounded-lg border border-red-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400';
 
 /**
  * Saisie de date au format francophone JJ-MM-AAAA (les tirets se placent tout seuls).
@@ -23,8 +27,9 @@ export default function DateInput({
     label,
     value,
     onChange,
+    flagged = false,
     labelClassName = DEFAULT_LABEL,
-    inputClassName = DEFAULT_INPUT,
+    inputClassName = flagged ? FLAGGED_INPUT : DEFAULT_INPUT,
 }: DateInputProps) {
     const [text, setText] = useState(isoToFr(value));
 
@@ -57,6 +62,9 @@ export default function DateInput({
                 className={isInvalid ? inputClassName.replace('border-gray-300', 'border-red-500') : inputClassName}
             />
             {isInvalid && <p className="text-xs text-red-600 mt-1">Date invalide. Format attendu : JJ-MM-AAAA.</p>}
+            {flagged && !isInvalid && (
+                <p className="text-[11px] font-semibold text-red-600 mt-1">↩️ À corriger — demandé par les RH</p>
+            )}
         </div>
     );
 }
