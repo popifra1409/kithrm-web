@@ -18,6 +18,9 @@ export interface CensusCurrentDependent {
   phone: string | null;
   email: string | null;
   address: string | null;
+  // L'acte de naissance qui prouve la filiation avec un parent sert aux deux parents :
+  // le web s'en sert pour ne pas redemander une pièce déjà au dossier.
+  has_birth_certificate?: boolean;
 }
 
 export interface CensusCurrentDiploma {
@@ -146,6 +149,8 @@ export interface CensusDraftDependent {
   email: string;
   address: string;
   removed: boolean;
+  // Report de la fiche : une pièce déjà déposée pour ce parent, à ne pas redemander.
+  has_birth_certificate?: boolean;
   documents: {
     photo?: File | null;
     id_card?: File | null;
@@ -274,6 +279,7 @@ export function buildInitialDraft(current: CensusCurrentResponse): CensusDraft {
       email: d.email ?? '',
       address: d.address ?? '',
       removed: false,
+      has_birth_certificate: d.has_birth_certificate,
       documents: {},
     })),
     diplomas: (data?.diplomas ?? []).map((d) => ({

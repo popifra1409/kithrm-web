@@ -53,6 +53,25 @@ const EMPTY_DIPLOMA: CensusDraftDiploma = {
   document: null,
 };
 
+/**
+ * Un père ou une mère se justifie par l'acte de naissance DE L'EMPLOYÉ : la même
+ * pièce couvre les deux parents, et un parent déjà au dossier en tient lieu pour
+ * l'autre. Le serveur applique la même règle et tranche au final
+ * (CensusController::submit) — le web ne fait que retirer une saisie inutile.
+ */
+const PARENT_RELATIONS = ['father', 'mother'];
+
+function hasFamilyAct(dependents: CensusDraftDependent[]): boolean {
+  return dependents.some(
+    (d) =>
+      !d.removed &&
+      PARENT_RELATIONS.includes(d.relationship) &&
+      // Une ligne déjà enregistrée aux RH porte obligatoirement son acte : pas besoin
+      // de le redemander, même si le brouillon local a été sauvé avant ce signalement.
+      (!!d.documents.birth_certificate || !!d.has_birth_certificate || d.existing_id !== null),
+  );
+}
+
 type Stage = DraftStage | 'review';
 
 /**
@@ -366,9 +385,21 @@ export default function CensusPage() {
 
     const activeDependents = draft.dependents.filter((d) => !d.removed);
     const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
+    const familyActAvailable = hasFamilyAct(activeDependents);
 
-    if (activeDependents.some((d) => !d.existing_id && !d.documents.birth_certificate)) {
-      alert("Un acte de naissance est requis pour chaque nouvel ayant droit.");
+    const missingAct = activeDependents.find(
+      (d) =>
+        !d.existing_id &&
+        !d.documents.birth_certificate &&
+        !(PARENT_RELATIONS.includes(d.relationship) && familyActAvailable),
+    );
+    if (missingAct) {
+      setStage('family');
+      alert(
+        PARENT_RELATIONS.includes(missingAct.relationship)
+          ? "Pour déclarer un parent, joins ton acte de naissance : c'est lui qui prouve la filiation. Une seule pièce suffit pour le père et la mère."
+          : "Un acte de naissance est requis pour chaque nouvel ayant droit.",
+      );
       return;
     }
     if (activeDiplomas.some((d) => !d.existing_id && !d.document)) {
@@ -1244,6 +1275,7 @@ export default function CensusPage() {
       {editingDependentIndex !== null && (
         <DependentModal
           initial={editingDependentIndex === 'new' ? EMPTY_DEPENDENT : draft.dependents[editingDependentIndex]}
+          familyActAvailable={hasFamilyAct(draft.dependents.filter((d) => !d.removed))}
           onCancel={() => setEditingDependentIndex(null)}
           onSave={saveDependent}
         />
@@ -1452,14 +1484,26 @@ function Modal({ title, children }: { title: string; children: React.ReactNode }
 
 function DependentModal({
   initial,
+  familyActAvailable,
   onCancel,
   onSave,
 }: {
   initial: CensusDraftDependent;
+  familyActAvailable: boolean;
   onCancel: () => void;
   onSave: (item: CensusDraftDependent) => void;
 }) {
   const [item, setItem] = useState<CensusDraftDependent>(initial);
+  const isParent = PARENT_RELATIONS.includes(item.relationship);
+  // Un parent n'a pas besoin de sa propre pièce si l'acte familial est déjà là.
+  const actCovered = isParent && familyActAvailable && !item.documents.birth_certificate;
+  const actTitle = isParent ? "Acte de naissance de l'employé" : "Acte de naissance de l'ayant droit";
+  let actSuffix = '*';
+  if (item.existing_id) {
+    actSuffix = '(joindre si changement)';
+  } else if (actCovered) {
+    actSuffix = '(facultatif — déjà fourni)';
+  }
 
   function handleSave() {
     if (!item.last_name.trim() || !item.birth_date.trim()) {
@@ -1470,8 +1514,12 @@ function DependentModal({
       alert('Date de naissance invalide. Format attendu : JJ-MM-AAAA.');
       return;
     }
-    if (!item.existing_id && !item.documents.birth_certificate) {
-      alert("L'acte de naissance est obligatoire pour un nouvel ayant droit.");
+    if (!item.existing_id && !item.documents.birth_certificate && !(isParent && familyActAvailable)) {
+      alert(
+        isParent
+          ? "Pour déclarer un parent, joins ton acte de naissance : c'est lui qui prouve la filiation."
+          : "L'acte de naissance est obligatoire pour un nouvel ayant droit.",
+      );
       return;
     }
     if (item.relationship === 'spouse' && !item.existing_id && !item.documents.marriage_certificate) {
@@ -1516,10 +1564,17 @@ function DependentModal({
         />
 
         <FileField
-          label={`Acte de naissance ${item.existing_id ? '(joindre si changement)' : '*'}`}
+          label={`${actTitle} ${actSuffix}`}
           file={item.documents.birth_certificate ?? null}
           onChange={(f) => setItem((p) => ({ ...p, documents: { ...p.documents, birth_certificate: f } }))}
         />
+        {isParent && (
+          <p className="text-xs text-gray-500 -mt-1">
+            {actCovered
+              ? '✅ La pièce qui prouve la filiation est déjà au dossier pour un autre parent : elle servira pour cette déclaration, inutile de la renvoyer.'
+              : "C'est TON acte de naissance qui prouve la filiation avec ce parent — la même pièce sert pour le père et la mère."}
+          </p>
+        )}
         {item.relationship === 'spouse' && (
           <FileField
             label={`Acte de mariage ${item.existing_id ? '(joindre si changement)' : '*'}`}
