@@ -62,7 +62,10 @@ apiClient.interceptors.response.use(
 
 export interface ApiError {
   message: string;
+  status?: number;
   errors?: Record<string, string[]>;
+  /** Corps complet de la réponse : les écrans publics y lisent les champs métier (reason, attempts_left…). */
+  data?: Record<string, unknown>;
 }
 
 export function extractApiError(error: unknown): ApiError {
@@ -72,7 +75,9 @@ export function extractApiError(error: unknown): ApiError {
     if (err.response?.data) {
       return {
         message: err.response.data.message ?? 'Une erreur est survenue.',
+        status: err.response.status,
         errors: err.response.data.errors,
+        data: err.response.data as Record<string, unknown>,
       };
     }
 

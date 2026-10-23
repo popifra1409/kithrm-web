@@ -58,6 +58,37 @@ export async function login(payload: LoginPayload): Promise<AuthResponse> {
   return data;
 }
 
+export const MAX_LOGIN_ATTEMPTS = 5;
+
+/** Une tentative ratée de moins, et l'aide au choix devient visible. */
+export const LOGIN_HELP_AFTER_ATTEMPTS = 3;
+
+/** Durée de pause infligée au compte après le 5e échec. */
+export const LOGIN_LOCK_MINUTES = 45;
+
+export type LoginDenialReason = 'invalid_credentials' | 'not_activated' | 'locked';
+
+export interface LoginDenial {
+  reason: LoginDenialReason;
+  attemptsLeft: number;
+  retryAfterMinutes: number | null;
+}
+
+/**
+ * Le serveur tient le compteur d'échecs : ses refus portent la raison de l'échec,
+ * les tentatives restantes et la durée du blocage. Rien n'est deviné côté client.
+ */
+export function readLoginDenial(data?: Record<string, unknown>): LoginDenial | null {
+  const reason = data?.reason;
+  if (reason !== 'invalid_credentials' && reason !== 'not_activated' && reason !== 'locked') return null;
+
+  return {
+    reason,
+    attemptsLeft: typeof data?.attempts_left === 'number' ? data.attempts_left : MAX_LOGIN_ATTEMPTS,
+    retryAfterMinutes: typeof data?.retry_after_minutes === 'number' ? data.retry_after_minutes : null,
+  };
+}
+
 export interface ActivationReviewPayload {
   verification_token: string;
   captcha_id: string;
@@ -93,13 +124,36 @@ export async function verifyActivation(payload: VerifyActivationPayload): Promis
 }
 
 /**
- * Secours quand l'employé ne connaît pas sa date : enregistre une demande que les
- * RH valident au guichet. Retourne la référence à présenter.
+ * Secours quand l'employé ne connaît pas sa date : enregistre une demande que le
+ * Service RH valide après vérification d'identité. Retourne la référence à présenter.
  */
 export async function requestActivationReview(
   payload: ActivationReviewPayload
 ): Promise<ActivationReviewResponse> {
   const { data } = await apiClient.post<ActivationReviewResponse>('/auth/activate/request', payload);
+  return data;
+}
+
+export interface PasswordResetPayload {
+  matricule: string;
+  captcha_id: string;
+  captcha_answer: number;
+}
+
+/** Mot de passe oublié, étape 1 : le petit calcul qui accompagne la demande. */
+export async function fetchForgotPasswordCaptcha(matricule: string): Promise<ActivationCaptcha> {
+  const { data } = await apiClient.post<{ captcha: ActivationCaptcha }>('/auth/forgot-password/captcha', {
+    matricule,
+  });
+  return data.captcha;
+}
+
+/**
+ * Mot de passe oublié, étape 2 : enregistre la demande. Aucun mot de passe n'est
+ * modifié ici — l'agent du Service RH en génère un après avoir vérifié l'identité.
+ */
+export async function requestPasswordReset(payload: PasswordResetPayload): Promise<ActivationReviewResponse> {
+  const { data } = await apiClient.post<ActivationReviewResponse>('/auth/forgot-password', payload);
   return data;
 }
 

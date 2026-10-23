@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ActivatePage from './pages/ActivatePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import HomePage from './pages/HomePage';
 import ProfilePage from './pages/ProfilePage';
 import LeavesPage from './pages/LeavesPage';
@@ -27,6 +28,7 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/activate" element={<ActivatePage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
             <Route
               element={

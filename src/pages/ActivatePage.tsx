@@ -182,8 +182,8 @@ export default function ActivatePage() {
   }
 
   /**
-   * Secours : l'employé ne retrouve pas sa date. On enregistre une demande que les
-   * RH valideront au guichet après vérification d'identité ; le calcul doit être
+   * Secours : l'employé ne retrouve pas sa date. On enregistre une demande que le
+   * Service RH validera après vérification d'identité ; le calcul doit être
    * résolu pour éviter d'engorger la file d'attente.
    */
   async function handleRequestReview() {
@@ -442,8 +442,8 @@ export default function ActivatePage() {
 
             <div className="border-t border-gray-100 pt-4">
               <p className="text-xs text-gray-500 text-center mb-2">
-                Impossible de vous rappeler&nbsp;? Les Ressources Humaines peuvent vérifier votre
-                identité au guichet et ouvrir votre compte.
+                Impossible de vous rappeler&nbsp;? Le Service RH peut vérifier votre
+                identité sur place et ouvrir votre compte.
               </p>
               <button
                 type="button"
