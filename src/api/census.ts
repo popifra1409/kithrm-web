@@ -301,6 +301,22 @@ export async function submitCensus(
 ): Promise<void> {
   const formData = new FormData();
 
+  const dependentDocKeys = ['photo', 'id_card', 'birth_certificate', 'marriage_certificate'] as const;
+
+  // PHP fait disparaître les fichiers qui dépassent max_file_uploads sans laisser ni
+  // code d'erreur ni trace : l'acte manque et rien ne le dit. Le client déclare donc
+  // le nombre de pièces envoyées, en premier pour survivre à toute coupure du corps,
+  // et le serveur compare avec ce qu'il a réellement reçu.
+  const fileParts =
+    [draft.photo, draft.contract.contract_document, draft.contract.service_start_document].filter(Boolean)
+      .length +
+    draft.dependents
+      .filter((d) => !d.removed)
+      .reduce((n, d) => n + dependentDocKeys.filter((k) => d.documents?.[k]).length, 0) +
+    draft.diplomas.filter((d) => !d.removed && d.document).length;
+
+  formData.append('files_sent', String(fileParts));
+
   formData.append(
     'personal[matricule_fonction_publique]',
     (draft.personal.matricule_fonction_publique ?? '').trim()
@@ -365,7 +381,7 @@ export async function submitCensus(
       formData.append(`dependents[${index}][email]`, dependent.email ?? '');
       formData.append(`dependents[${index}][address]`, dependent.address ?? '');
 
-      (['photo', 'id_card', 'birth_certificate', 'marriage_certificate'] as const).forEach((key) => {
+      dependentDocKeys.forEach((key) => {
         const file = dependent.documents?.[key];
         if (file) formData.append(`dependents[${index}][${key}]`, file);
       });
