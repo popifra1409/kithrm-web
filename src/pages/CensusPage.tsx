@@ -61,14 +61,30 @@ const EMPTY_DIPLOMA: CensusDraftDiploma = {
  */
 const PARENT_RELATIONS = ['father', 'mother'];
 
+/**
+ * Une pièce de 0 octet (photo reprise trop tôt, PDF tronqué) est effacée par le
+ * serveur comme si rien n'avait été joint : elle ne doit jamais compter comme fournie.
+ */
+function isAttached(file?: File | null): boolean {
+  return !!file && file.size > 0;
+}
+
+/** L'ayant droit tel que l'employé le lit sur sa ligne, pour nommer la pièce manquante. */
+function dependentWho(d: CensusDraftDependent): string {
+  const name = `${d.first_name ?? ''} ${d.last_name ?? ''}`.trim();
+
+  return name !== '' ? `${RELATIONSHIP_LABELS[d.relationship]} « ${name} »` : RELATIONSHIP_LABELS[d.relationship];
+}
+
 function hasFamilyAct(dependents: CensusDraftDependent[]): boolean {
   return dependents.some(
     (d) =>
       !d.removed &&
       PARENT_RELATIONS.includes(d.relationship) &&
-      // Une ligne déjà enregistrée aux RH porte obligatoirement son acte : pas besoin
-      // de le redemander, même si le brouillon local a été sauvé avant ce signalement.
-      (!!d.documents.birth_certificate || !!d.has_birth_certificate || d.existing_id !== null),
+      // Le serveur ne réutilise que l'acte réellement au dossier (birth_certificate_path),
+      // signalé par has_birth_certificate. Une ligne existante sans pièce enregistrée ne
+      // couvrirait rien : le prétendre valable ferait échouer la soumission plus loin.
+      (isAttached(d.documents.birth_certificate) || !!d.has_birth_certificate),
   );
 }
 
@@ -390,19 +406,19 @@ export default function CensusPage() {
     const missingAct = activeDependents.find(
       (d) =>
         !d.existing_id &&
-        !d.documents.birth_certificate &&
+        !isAttached(d.documents.birth_certificate) &&
         !(PARENT_RELATIONS.includes(d.relationship) && familyActAvailable),
     );
     if (missingAct) {
       setStage('family');
       alert(
         PARENT_RELATIONS.includes(missingAct.relationship)
-          ? "Pour déclarer un parent, joins ton acte de naissance : c'est lui qui prouve la filiation. Une seule pièce suffit pour le père et la mère."
-          : "Un acte de naissance est requis pour chaque nouvel ayant droit.",
+          ? `Pour déclarer ${dependentWho(missingAct)}, joins TON acte de naissance : c'est lui qui prouve la filiation. Une seule pièce suffit pour le père et la mère.`
+          : `${dependentWho(missingAct)} : son acte de naissance n'est pas joint. Ouvre sa ligne et sélectionne le fichier — une pièce vide ou trop lourde est écartée par le serveur sans que le formulaire le sache.`,
       );
       return;
     }
-    if (activeDiplomas.some((d) => !d.existing_id && !d.document)) {
+    if (activeDiplomas.some((d) => !d.existing_id && !isAttached(d.document))) {
       alert('Un document justificatif est requis pour chaque nouveau diplôme.');
       return;
     }
@@ -1496,7 +1512,7 @@ function DependentModal({
   const [item, setItem] = useState<CensusDraftDependent>(initial);
   const isParent = PARENT_RELATIONS.includes(item.relationship);
   // Un parent n'a pas besoin de sa propre pièce si l'acte familial est déjà là.
-  const actCovered = isParent && familyActAvailable && !item.documents.birth_certificate;
+  const actCovered = isParent && familyActAvailable && !isAttached(item.documents.birth_certificate);
   const actTitle = isParent ? "Acte de naissance de l'employé" : "Acte de naissance de l'ayant droit";
   let actSuffix = '*';
   if (item.existing_id) {
@@ -1514,15 +1530,15 @@ function DependentModal({
       alert('Date de naissance invalide. Format attendu : JJ-MM-AAAA.');
       return;
     }
-    if (!item.existing_id && !item.documents.birth_certificate && !(isParent && familyActAvailable)) {
+    if (!item.existing_id && !isAttached(item.documents.birth_certificate) && !(isParent && familyActAvailable)) {
       alert(
         isParent
-          ? "Pour déclarer un parent, joins ton acte de naissance : c'est lui qui prouve la filiation."
-          : "L'acte de naissance est obligatoire pour un nouvel ayant droit.",
+          ? "Pour déclarer un parent, joins TON acte de naissance : c'est lui qui prouve la filiation."
+          : `Pour ${dependentWho(item)}, l'acte de naissance est obligatoire. Vérifie que le fichier n'est pas vide (0 octet) : reprends la photo au besoin.`,
       );
       return;
     }
-    if (item.relationship === 'spouse' && !item.existing_id && !item.documents.marriage_certificate) {
+    if (item.relationship === 'spouse' && !item.existing_id && !isAttached(item.documents.marriage_certificate)) {
       alert("L'acte de mariage est obligatoire pour un(e) conjoint(e).");
       return;
     }
@@ -1664,6 +1680,12 @@ function DocumentLink({ label, url }: { label: string; url: string }) {
   );
 }
 
+function fileSizeLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
 function FileField({
   label,
   file,
@@ -1681,10 +1703,32 @@ function FileField({
       <input
         type="file"
         accept="application/pdf,image/*"
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          const picked = e.target.files?.[0] ?? null;
+
+          // Un fichier de 0 octet est traité comme si rien n'avait été joint : le
+          // serveur l'ignore et le formulaire aurait affiché une pièce « fournie ».
+          if (picked && picked.size === 0) {
+            alert(
+              `« ${picked.name} » est vide : l'appareil photo ou l'application ne l'a pas enregistré. ` +
+                'Reprends la photo, ou choisis un autre fichier.'
+            );
+            e.target.value = '';
+            return;
+          }
+
+          onChange(picked);
+        }}
         className={`w-full text-xs ${flagged ? 'rounded-lg border-2 border-red-500 bg-white p-2' : ''}`}
       />
-      {file && <p className="text-xs text-green-700 mt-1">✅ {file.name}</p>}
+      {file && file.size === 0 && (
+        <p className="text-xs text-red-700 mt-1">⚠️ {file.name} est vide : sélectionne-le à nouveau.</p>
+      )}
+      {file && file.size > 0 && (
+        <p className="text-xs text-green-700 mt-1">
+          ✅ {file.name} · {fileSizeLabel(file.size)}
+        </p>
+      )}
       {flagged && <CorrectionNote />}
     </div>
   );
