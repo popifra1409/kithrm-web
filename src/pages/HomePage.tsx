@@ -10,6 +10,33 @@ const quickLinks = [
   { to: '/census', label: 'Recensement', icon: '📋' },
 ];
 
+/** Même vitrine que sur https://hopitalgeneraldeyaounde.cm/espace-personnel. */
+const ESPACE_PERSONNEL_URL = 'https://hopitalgeneraldeyaounde.cm/espace-personnel';
+
+/**
+ * Les services annoncés sur la vitrine. Ceux qui ont déjà leur écran dans le
+ * portail pointent dessus ; les autres restent affichés avec « Bientôt », pour
+ * que l'employé ne cherche pas une fonction qu'on ne lui a pas annoncée.
+ */
+const portalServices = [
+  { id: 'fiches-de-paie', icon: '💰', label: 'Fiches de paie', desc: 'Consulte et télécharge tes bulletins de salaire' },
+  { id: 'conges-absences', icon: '🏖️', label: 'Congés & Absences', desc: 'Demande et suis tes congés en ligne', to: '/leaves' },
+  { id: 'dossier-administratif', icon: '📋', label: 'Dossier administratif', desc: 'Accède à ton dossier personnel complet', to: '/profile' },
+  { id: 'formation-continue', icon: '🎓', label: 'Formation continue', desc: 'Inscris-toi aux formations disponibles' },
+  { id: 'evaluations', icon: '📊', label: 'Évaluations', desc: 'Consulte tes évaluations de performance' },
+  { id: 'informations-rh', icon: '📢', label: 'Informations RH', desc: 'Reste informé des actualités du personnel' },
+];
+
+/** Chaque carte renvoie sur son ancre dans la page vitrine. */
+const publications = [
+  { id: 'reglement-interieur', icon: '📜', label: 'Règlement intérieur', desc: 'Code de conduite, discipline et règles de fonctionnement' },
+  { id: 'convention-collective', icon: '🤝', label: 'Convention collective', desc: 'Droits, obligations et conditions de travail du personnel' },
+  { id: 'nouvelles-reformes', icon: '🔄', label: 'Nouvelles réformes', desc: 'Dernières réformes et mises à jour réglementaires' },
+  { id: 'personnel-en-retraite', icon: '👴', label: 'Personnel en retraite', desc: 'Informations et droits pour le personnel retraité' },
+  { id: 'circulaires-notes', icon: '📋', label: 'Circulaires & Notes', desc: 'Communications officielles de la Direction Générale' },
+  { id: 'formations-stages', icon: '🎓', label: 'Formations & Stages', desc: 'Opportunités de développement professionnel' },
+];
+
 function initialsOf(name: string): string {
   return name
     .split(/\s+/)
@@ -100,6 +127,63 @@ export default function HomePage() {
             Bientôt
           </span>
         </div>
+      </div>
+
+      <h2 className="text-base font-bold text-gray-900 mt-8 mb-1">Votre espace RH</h2>
+      <p className="text-xs text-gray-500 mb-3">Un portail complet, sécurisé et disponible 24h/24</p>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {portalServices.map((service) =>
+          service.to ? (
+            <Link
+              key={service.id}
+              to={service.to}
+              className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 transition hover:border-[#1e3a5f]/30 hover:shadow active:scale-[0.98]"
+            >
+              <span className="text-xl block" aria-hidden>{service.icon}</span>
+              <span className="text-sm font-semibold text-gray-800">{service.label}</span>
+              <span className="text-xs text-gray-500 block mt-1 leading-snug">{service.desc}</span>
+            </Link>
+          ) : (
+            <div
+              key={service.id}
+              className="bg-gray-50 rounded-xl border border-dashed border-gray-200 p-4"
+              aria-disabled="true"
+              title="Pas encore disponible sur le web"
+            >
+              <span className="text-xl block opacity-40" aria-hidden>{service.icon}</span>
+              <span className="text-sm font-semibold text-gray-400">{service.label}</span>
+              <span className="text-xs text-gray-400 block mt-1 leading-snug">{service.desc}</span>
+              <span className="mt-2 inline-block text-[10px] uppercase tracking-wide text-gray-400 bg-gray-200/70 rounded-full px-2 py-0.5">
+                Bientôt
+              </span>
+            </div>
+          )
+        )}
+      </div>
+
+      <h2 className="text-base font-bold text-gray-900 mt-8 mb-1">📚 Publications & Documents officiels</h2>
+      <p className="text-xs text-gray-500 mb-3">
+        Règlements, conventions, circulaires et informations importantes pour le personnel
+      </p>
+
+      <div className="grid gap-2">
+        {publications.map((doc) => (
+          <a
+            key={doc.id}
+            href={`${ESPACE_PERSONNEL_URL}#${doc.id}`}
+            target="_blank"
+            rel="noreferrer"
+            className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-start gap-3 transition hover:border-[#1e3a5f]/30 hover:shadow"
+          >
+            <span className="text-xl shrink-0" aria-hidden>{doc.icon}</span>
+            <span className="min-w-0">
+              <span className="text-sm font-semibold text-gray-800 block">{doc.label}</span>
+              <span className="text-xs text-gray-500 block leading-snug">{doc.desc}</span>
+            </span>
+            <span className="ml-auto self-center text-gray-300 text-sm shrink-0" aria-hidden>↗</span>
+          </a>
+        ))}
       </div>
     </div>
   );
