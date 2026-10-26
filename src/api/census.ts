@@ -402,5 +402,8 @@ export async function submitCensus(
 
   await apiClient.post(`/employee/census/${campaignId}/submit`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    // Le timeout global de 15 s couperait en route un envoi chargé en scans :
+    // la coupure arrive côté serveur sous forme de pièces manquantes.
+    timeout: 600000,
   });
 }
