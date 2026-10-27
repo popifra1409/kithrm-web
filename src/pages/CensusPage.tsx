@@ -155,6 +155,29 @@ function firstFlaggedStage(fields: { key: string }[] | undefined): DraftStage | 
   return null;
 }
 
+/**
+ * À quelle étape se trouve un champ refusé par le serveur, dont la clé vient de sa
+ * validation (« personal.email », « dependents.0.birth_date »). Seule la racine le dit
+ * pour les lignes : leurs colonnes portent le même nom que celles de l'identité.
+ */
+function serverErrorStage(key: string): DraftStage {
+  const root = key.split('.')[0];
+  if (root === 'dependents' || root === 'diplomas') return 'family';
+
+  return FIELD_STAGES[key.split('.').pop() as string] ?? 'identity';
+}
+
+/**
+ * Champs de la fiche à surligner après un refus du serveur. Les lignes d'ayant droit et
+ * de diplôme en sont écartées : surligner « date de naissance » à l'identité quand le
+ * problème est l'enfant n°2 ferait corriger une valeur qui est bonne.
+ */
+function serverErrorFields(errors: Record<string, string[]>): string[] {
+  return Object.keys(errors)
+    .filter((key) => !/^(dependents|diplomas)\./.test(key))
+    .map((key) => key.split('.').pop() as string);
+}
+
 const toOptions = (list: { id: number; name: string }[]) =>
   list.map((x) => ({ value: String(x.id), label: x.name }));
 
@@ -173,6 +196,9 @@ export default function CensusPage() {
   const [restoredAt, setRestoredAt] = useState<string | null>(null);
   const [draftSavedOffline, setDraftSavedOffline] = useState(false);
   const [bankAckFor, setBankAckFor] = useState<string | null>(null);
+  // Refus du serveur à la soumission : les champs fautifs, tels qu'il les nomme.
+  const [refusedProblems, setRefusedProblems] = useState<string[]>([]);
+  const [refusedFields, setRefusedFields] = useState<string[]>([]);
 
   // Brouillon tel que renvoyé par le serveur : sert à savoir si l'agent a vraiment modifié quelque chose.
   const pristineRef = useRef<CensusDraft | null>(null);
@@ -269,10 +295,11 @@ export default function CensusPage() {
 
   const salaryClassification = current?.current_data?.salary_classification;
 
-  // Champs renvoyés par les RH : surlignés et listés, mais jamais bloquants.
+  // Champs renvoyés par les RH ou refusés par le serveur : surlignés et listés,
+  // jamais bloquants.
   const flaggedFields = useMemo(
-    () => new Set((current?.rejection_fields ?? []).map((f) => f.key)),
-    [current?.rejection_fields]
+    () => new Set([...(current?.rejection_fields ?? []).map((f) => f.key), ...refusedFields]),
+    [current?.rejection_fields, refusedFields]
   );
 
   // Les étapes qui contiennent au moins une correction demandée, pour le repère rouge.
@@ -282,8 +309,12 @@ export default function CensusPage() {
       const stage = FIELD_STAGES[field.key];
       if (stage) stages.add(stage);
     }
+    for (const key of refusedFields) {
+      const stage = FIELD_STAGES[key];
+      if (stage) stages.add(stage);
+    }
     return stages;
-  }, [current?.rejection_fields]);
+  }, [current?.rejection_fields, refusedFields]);
 
   /**
    * Coordonnées bancaires/CNPS différentes de la fiche : le serveur refusera la
@@ -470,11 +501,27 @@ export default function CensusPage() {
       setRestoredAt(null);
       setDraftSavedOffline(false);
       setBankAckFor(null);
+      setRefusedProblems([]);
+      setRefusedFields([]);
       alert('Votre recensement a été soumis pour validation.');
       setStage('identity');
       load();
     } catch (error) {
-      alert(extractApiError(error).message);
+      const apiError = extractApiError(error);
+      const refused = apiError.errors ?? {};
+      const keys = Object.keys(refused);
+
+      if (keys.length > 0) {
+        // « Données invalides » sans destination est le pire message possible : l'employé
+        // relit tout le formulaire sans savoir où. On ouvre l'étape fautive, on surligne
+        // les champs de la fiche, et la liste reprend les noms du serveur.
+        setRefusedProblems(Object.values(refused).flat());
+        setRefusedFields(serverErrorFields(refused));
+        setStage(serverErrorStage(keys[0]));
+        window.scrollTo({ top: 0 });
+      } else {
+        alert(apiError.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -776,6 +823,37 @@ export default function CensusPage() {
       )}
 
       <StageNav stage={stage} onPick={goTo} flaggedStages={flaggedStages} />
+
+      {refusedProblems.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <div className="flex items-start justify-between gap-3">
+            <p className="font-semibold text-sm text-red-800">
+              {refusedProblems.length === 1
+                ? "Un champ bloque encore l'envoi"
+                : `${refusedProblems.length} champs bloquent l'envoi`}
+            </p>
+            <button
+              onClick={() => setRefusedProblems([])}
+              className="text-xs font-semibold text-red-800 hover:underline shrink-0"
+            >
+              Masquer
+            </button>
+          </div>
+
+          <ul className="mt-2 space-y-1">
+            {refusedProblems.map((problem) => (
+              <li key={problem} className="text-xs text-red-700 leading-relaxed">
+                • {problem}
+              </li>
+            ))}
+          </ul>
+
+          <p className="text-xs text-red-700/80 mt-2">
+            Rien n'est perdu : ton brouillon reste sur cet appareil. Corrige ces points, puis reviens à
+            Récapitulatif pour confirmer l'envoi.
+          </p>
+        </div>
+      )}
 
       <Section title="Photo" showIf={stage === 'identity'} flagged={flaggedFields.has('photo')}>
         <PhotoCaptureInput
