@@ -145,6 +145,18 @@ export default function LoginPage() {
           </button>
         </form>
 
+        {/* Entrée permanente vers l'activation : un employé qui n'a jamais ouvert son
+            compte ne doit pas être obligé d'échouer une connexion pour découvrir le lien,
+            alors que chaque échec lui retire une des cinq tentatives. Le bloc d'aide le
+            propose déjà, on ne l'affiche donc pas deux fois. */}
+        {!showHelp && (
+          <div className="text-center mt-5">
+            <Link to="/activate" className="text-sm font-medium text-[#1e3a5f] hover:underline">
+              Première connexion&nbsp;? Activer mon compte
+            </Link>
+          </div>
+        )}
+
         {showHelp && (
           <div className="mt-5 rounded-lg border border-[#1e3a5f]/25 bg-[#1e3a5f]/5 p-4">
             <p className="text-sm font-semibold text-[#1e3a5f]">Vous n'arrivez pas à vous connecter&nbsp;?</p>
