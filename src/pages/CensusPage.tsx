@@ -9,6 +9,14 @@ import { extractApiError, isNetworkError } from '../api/client';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 import DateInput from '../components/DateInput';
 import { isoToFr } from '../lib/dates';
+import {
+  DOCUMENT_EXTENSIONS,
+  MAX_UPLOAD_BYTES,
+  PHOTO_EXTENSIONS,
+  fileSizeLabel,
+  uploadHint,
+  uploadRefusal,
+} from '../lib/uploads';
 import { computeCascade } from '../lib/organization';
 import { clearCensusDraft, loadCensusDraft, saveCensusDraft } from '../lib/censusDraftStore';
 import type { DraftStage } from '../lib/censusDraftStore';
@@ -639,7 +647,7 @@ export default function CensusPage() {
           <RecapRow label="Date de recrutement" value={isoToFr(draft.personal.recruitment_date)} />
           <RecapRow label="Date de prise de service" value={isoToFr(draft.personal.service_start_date)} />
           <RecapRow label="Téléphone" value={draft.personal.phone} />
-          <RecapRow label="Email" value={draft.personal.email} />
+          <RecapRow label="Adresse email" value={draft.personal.email} />
           <RecapRow label="Adresse" value={draft.personal.address} />
           <RecapRow label="Ville" value={draft.personal.city} />
         </Section>
@@ -860,6 +868,8 @@ export default function CensusPage() {
           label="Photo de profil"
           file={draft.photo}
           onChange={(f) => setDraft((d) => (d ? { ...d, photo: f } : d))}
+          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES)}
+          maxBytes={MAX_UPLOAD_BYTES}
         />
         {!draft.photo && current.current_data?.personal.photo_url && (
           <div className="mt-3 flex items-center gap-2">
@@ -956,7 +966,7 @@ export default function CensusPage() {
             />
           </div>
           <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} flagged={flaggedFields.has('phone')} />
-          <Field label="Email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
+          <Field label="Adresse email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
           <Field label="Adresse" value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} flagged={flaggedFields.has('address')} />
           <Field label="Ville" value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} flagged={flaggedFields.has('city')} />
         </div>
@@ -1026,7 +1036,7 @@ export default function CensusPage() {
           </div>
 
           <FileField
-            label="Contrat de travail (PDF ou image)"
+            label="Contrat de travail"
             file={draft.contract.contract_document}
             onChange={(f) => patchContract({ contract_document: f })}
             flagged={flaggedFields.has('contract_document')}
@@ -1036,7 +1046,7 @@ export default function CensusPage() {
           )}
 
           <FileField
-            label="Document de prise de service (PDF ou image)"
+            label="Document de prise de service"
             file={draft.contract.service_start_document}
             onChange={(f) => patchContract({ service_start_document: f })}
             flagged={flaggedFields.has('service_start_document')}
@@ -1655,6 +1665,8 @@ function DependentModal({
           label="Photo"
           file={item.documents.photo ?? null}
           onChange={(f) => setItem((p) => ({ ...p, documents: { ...p.documents, photo: f } }))}
+          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES)}
+          maxBytes={MAX_UPLOAD_BYTES}
         />
 
         <FileField
@@ -1758,12 +1770,6 @@ function DocumentLink({ label, url }: { label: string; url: string }) {
   );
 }
 
-function fileSizeLabel(bytes: number): string {
-  if (bytes < 1024) return `${bytes} o`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
-}
-
 function FileField({
   label,
   file,
@@ -1778,6 +1784,7 @@ function FileField({
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+      <p className="text-xs text-gray-400 mb-1">{uploadHint(DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES)}</p>
       <input
         type="file"
         accept="application/pdf,image/*"
@@ -1791,6 +1798,16 @@ function FileField({
               `« ${picked.name} » est vide : l'appareil photo ou l'application ne l'a pas enregistré. ` +
                 'Reprends la photo, ou choisis un autre fichier.'
             );
+            e.target.value = '';
+            return;
+          }
+
+          // Refusé ici plutôt qu'à l'envoi : l'employé ne doit pas remplir les cinq
+          // étapes pour apprendre au dernier moment que sa pièce ne passerait pas.
+          const refusal = picked && uploadRefusal(picked, DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES);
+
+          if (refusal) {
+            alert(refusal);
             e.target.value = '';
             return;
           }

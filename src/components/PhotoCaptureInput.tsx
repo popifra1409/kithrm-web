@@ -1,13 +1,18 @@
 import { useRef, useState } from 'react';
+import { PHOTO_EXTENSIONS, uploadRefusal } from '../lib/uploads';
 
 interface Props {
     label: string;
     file: File | null;
     onChange: (file: File | null) => void;
     required?: boolean;
+    /** Formats et taille acceptés, tels que promis par l'écran. Omis = rien n'affiché. */
+    hint?: string;
+    /** Refusé à la sélection au-delà de cette taille ; omis = rien n'est refusé ici. */
+    maxBytes?: number;
 }
 
-export default function PhotoCaptureInput({ label, file, onChange, required }: Props) {
+export default function PhotoCaptureInput({ label, file, onChange, required, hint, maxBytes }: Props) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -64,6 +69,8 @@ export default function PhotoCaptureInput({ label, file, onChange, required }: P
             <label className="block text-xs font-semibold text-gray-500 mb-1">
                 {label} {required && '*'}
             </label>
+
+            {hint && <p className="text-xs text-gray-400 -mt-0.5 mb-2">{hint}</p>}
 
             {isCameraOpen ? (
                 <div className="rounded-lg overflow-hidden border border-gray-300">
@@ -126,7 +133,21 @@ export default function PhotoCaptureInput({ label, file, onChange, required }: P
                         ref={fileInputRef}
                         type="file"
                         accept="image/*"
-                        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+                        onChange={(e) => {
+                            const picked = e.target.files?.[0] ?? null;
+
+                            // Refusé à la sélection plutôt qu'à l'envoi, là où l'écran
+                            // annonce une limite : l'employé ne remplit pas tout pour rien.
+                            const refusal = picked && maxBytes ? uploadRefusal(picked, PHOTO_EXTENSIONS, maxBytes) : null;
+
+                            if (refusal) {
+                                alert(refusal);
+                                e.target.value = '';
+                                return;
+                            }
+
+                            onChange(picked);
+                        }}
                         className="hidden"
                     />
                 </div>

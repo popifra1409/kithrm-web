@@ -222,7 +222,7 @@ export default function ProfilePage() {
                 {isEditing ? (
                     <div className="space-y-4">
                         <Field label="Téléphone" value={phone} onChange={setPhone} type="tel" />
-                        <Field label="Email" value={email} onChange={setEmail} type="email" />
+                        <Field label="Adresse email" value={email} onChange={setEmail} type="email" />
                         <Field label="Adresse" value={address} onChange={setAddress} />
                         <Field label="Ville" value={city} onChange={setCity} />
 
@@ -254,7 +254,7 @@ export default function ProfilePage() {
                 ) : (
                     <>
                         <InfoRow label="Téléphone" value={profile.phone} />
-                        <InfoRow label="Email" value={profile.email} />
+                        <InfoRow label="Adresse email" value={profile.email} />
                         <InfoRow label="Adresse" value={profile.address} />
                         <InfoRow label="Ville" value={profile.city} />
                     </>
