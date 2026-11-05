@@ -5,11 +5,13 @@ import type { EmployeeProfile } from '../api/profile';
 import { changePassword, deleteAccount } from '../api/auth';
 import type { AccountDeletionReason } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LangContext';
 import { extractApiError } from '../api/client';
 
 export default function ProfilePage() {
     const navigate = useNavigate();
     const { logout } = useAuth();
+    const { tr } = useLang();
 
     const [profile, setProfile] = useState<EmployeeProfile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -54,7 +56,7 @@ export default function ProfilePage() {
             setAddress(data.address ?? '');
             setCity(data.city ?? '');
         } catch (error) {
-            alert(extractApiError(error).message);
+            alert(extractApiError(error, tr.api).message);
         } finally {
             setIsLoading(false);
         }
@@ -69,7 +71,7 @@ export default function ProfilePage() {
             await uploadProfilePhoto(file);
             await load();
         } catch (error) {
-            alert(extractApiError(error).message);
+            alert(extractApiError(error, tr.api).message);
         } finally {
             setIsUploadingPhoto(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -85,7 +87,7 @@ export default function ProfilePage() {
             setProfile(updated);
             setIsEditing(false);
         } catch (error) {
-            setErrorMessage(extractApiError(error).message);
+            setErrorMessage(extractApiError(error, tr.api).message);
         } finally {
             setIsSaving(false);
         }
@@ -96,15 +98,15 @@ export default function ProfilePage() {
         setPasswordSuccess(false);
 
         if (!currentPassword || !newPassword || !newPasswordConfirmation) {
-            setPasswordError('Veuillez remplir tous les champs.');
+            setPasswordError(tr.profile.errors.allFields);
             return;
         }
         if (newPassword !== newPasswordConfirmation) {
-            setPasswordError('Les deux nouveaux mots de passe ne correspondent pas.');
+            setPasswordError(tr.profile.errors.passwordMismatch);
             return;
         }
         if (newPassword.length < 8) {
-            setPasswordError('Le nouveau mot de passe doit contenir au moins 8 caractères.');
+            setPasswordError(tr.profile.errors.passwordShort);
             return;
         }
 
@@ -122,7 +124,7 @@ export default function ProfilePage() {
             setNewPasswordConfirmation('');
             setIsChangingPassword(false);
         } catch (error) {
-            setPasswordError(extractApiError(error).message);
+            setPasswordError(extractApiError(error, tr.api).message);
         } finally {
             setIsSavingPassword(false);
         }
@@ -131,12 +133,12 @@ export default function ProfilePage() {
     async function handleDeleteAccount() {
         setDeleteError(null);
 
-        if (deleteConfirmText.trim().toUpperCase() !== 'SUPPRIMER') {
-            setDeleteError('Veuillez taper SUPPRIMER pour confirmer.');
+        if (deleteConfirmText.trim().toUpperCase() !== tr.profile.confirmWord) {
+            setDeleteError(tr.profile.errors.confirmWord(tr.profile.confirmWord));
             return;
         }
         if (!deletePassword) {
-            setDeleteError('Veuillez saisir votre mot de passe.');
+            setDeleteError(tr.profile.errors.passwordRequired);
             return;
         }
 
@@ -152,7 +154,7 @@ export default function ProfilePage() {
             await logout();
             navigate('/login', { replace: true });
         } catch (error) {
-            setDeleteError(extractApiError(error).message);
+            setDeleteError(extractApiError(error, tr.api).message);
         } finally {
             setIsDeletingAccount(false);
         }
@@ -167,7 +169,7 @@ export default function ProfilePage() {
     }
 
     if (!profile) {
-        return <div className="p-10 text-gray-500">Impossible de charger le profil.</div>;
+        return <div className="p-10 text-gray-500">{tr.profile.loadFailed}</div>;
     }
 
     return (
@@ -185,7 +187,7 @@ export default function ProfilePage() {
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploadingPhoto}
                         className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#1e3a5f] border-2 border-white flex items-center justify-center text-white text-xs hover:opacity-90"
-                        title="Changer la photo"
+                        title={tr.profile.photoTitle}
                     >
                         {isUploadingPhoto ? '…' : '✏️'}
                     </button>
@@ -201,30 +203,30 @@ export default function ProfilePage() {
                 <p className="text-sm text-gray-500">{profile.matricule}</p>
             </div>
 
-            <Section title="Affectation">
-                <InfoRow label="Corps de métier" value={profile.trade_body} />
-                <InfoRow label="Qualification" value={profile.qualification} />
-                <InfoRow label="Poste" value={profile.job_title} />
-                <InfoRow label="Service" value={profile.service ?? profile.department} />
-                <InfoRow label="Statut" value={profile.administrative_status_label} />
+            <Section title={tr.profile.sections.assignment}>
+                <InfoRow label={tr.profile.fields.tradeBody} value={profile.trade_body} />
+                <InfoRow label={tr.profile.fields.qualification} value={profile.qualification} />
+                <InfoRow label={tr.profile.fields.jobTitle} value={profile.job_title} />
+                <InfoRow label={tr.profile.fields.service} value={profile.service ?? profile.department} />
+                <InfoRow label={tr.profile.fields.status} value={profile.administrative_status_label} />
             </Section>
 
             <Section
-                title="Coordonnées"
+                title={tr.profile.sections.contact}
                 action={
                     !isEditing && (
                         <button onClick={() => setIsEditing(true)} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
-                            Modifier
+                            {tr.profile.edit}
                         </button>
                     )
                 }
             >
                 {isEditing ? (
                     <div className="space-y-4">
-                        <Field label="Téléphone" value={phone} onChange={setPhone} type="tel" />
-                        <Field label="Adresse email" value={email} onChange={setEmail} type="email" />
-                        <Field label="Adresse" value={address} onChange={setAddress} />
-                        <Field label="Ville" value={city} onChange={setCity} />
+                        <Field label={tr.profile.fields.phone} value={phone} onChange={setPhone} type="tel" />
+                        <Field label={tr.profile.fields.email} value={email} onChange={setEmail} type="email" />
+                        <Field label={tr.profile.fields.address} value={address} onChange={setAddress} />
+                        <Field label={tr.profile.fields.city} value={city} onChange={setCity} />
 
                         {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
 
@@ -240,29 +242,29 @@ export default function ProfilePage() {
                                 }}
                                 className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                             >
-                                Annuler
+                                {tr.profile.cancel}
                             </button>
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
                                 className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                             >
-                                {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+                                {isSaving ? tr.profile.saving : tr.profile.save}
                             </button>
                         </div>
                     </div>
                 ) : (
                     <>
-                        <InfoRow label="Téléphone" value={profile.phone} />
-                        <InfoRow label="Adresse email" value={profile.email} />
-                        <InfoRow label="Adresse" value={profile.address} />
-                        <InfoRow label="Ville" value={profile.city} />
+                        <InfoRow label={tr.profile.fields.phone} value={profile.phone} />
+                        <InfoRow label={tr.profile.fields.email} value={profile.email} />
+                        <InfoRow label={tr.profile.fields.address} value={profile.address} />
+                        <InfoRow label={tr.profile.fields.city} value={profile.city} />
                     </>
                 )}
             </Section>
 
             <Section
-                title="Sécurité"
+                title={tr.profile.sections.security}
                 action={
                     !isChangingPassword && (
                         <button
@@ -272,17 +274,17 @@ export default function ProfilePage() {
                             }}
                             className="text-sm font-semibold text-[#1e3a5f] hover:underline"
                         >
-                            Changer le mot de passe
+                            {tr.profile.changePassword}
                         </button>
                     )
                 }
             >
                 {isChangingPassword ? (
                     <div className="space-y-4">
-                        <Field label="Mot de passe actuel" value={currentPassword} onChange={setCurrentPassword} type="password" />
-                        <Field label="Nouveau mot de passe" value={newPassword} onChange={setNewPassword} type="password" />
+                        <Field label={tr.profile.fields.currentPassword} value={currentPassword} onChange={setCurrentPassword} type="password" />
+                        <Field label={tr.profile.fields.newPassword} value={newPassword} onChange={setNewPassword} type="password" />
                         <Field
-                            label="Confirmer le nouveau mot de passe"
+                            label={tr.profile.fields.confirmPassword}
                             value={newPasswordConfirmation}
                             onChange={setNewPasswordConfirmation}
                             type="password"
@@ -301,66 +303,59 @@ export default function ProfilePage() {
                                 }}
                                 className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                             >
-                                Annuler
+                                {tr.profile.cancel}
                             </button>
                             <button
                                 onClick={handleChangePassword}
                                 disabled={isSavingPassword}
                                 className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                             >
-                                {isSavingPassword ? 'Enregistrement...' : 'Confirmer'}
+                                {isSavingPassword ? tr.profile.saving : tr.profile.confirm}
                             </button>
                         </div>
                     </div>
                 ) : (
                     <>
                         {passwordSuccess && (
-                            <p className="text-sm text-green-700 mb-2">✅ Mot de passe modifié avec succès.</p>
+                            <p className="text-sm text-green-700 mb-2">{tr.profile.passwordChanged}</p>
                         )}
-                        <p className="text-sm text-gray-500">••••••••</p>
+                        <p className="text-sm text-gray-500">{tr.profile.hiddenPassword}</p>
                     </>
                 )}
             </Section>
 
-            <Section title="Zone Dangereuse">
-                <p className="text-sm text-gray-600 mb-3">
-                    Supprimer votre compte met fin à votre accès à l'application (mobile et web). Votre
-                    dossier employé (informations personnelles, ayants droit, diplômes, historique) est
-                    conservé intégralement dans le système RH.
-                </p>
+            <Section title={tr.profile.sections.danger}>
+                <p className="text-sm text-gray-600 mb-3">{tr.profile.dangerIntro}</p>
                 <button
                     onClick={() => setShowDeleteModal(true)}
                     className="border border-red-600 text-red-600 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-red-50"
                 >
-                    Supprimer mon compte
+                    {tr.profile.deleteAccount}
                 </button>
             </Section>
 
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-xl p-6 w-full max-w-md">
-                        <h3 className="font-bold text-red-700 mb-1">Supprimer mon compte</h3>
-                        <p className="text-sm text-gray-600 mb-4">
-                            Cette action est irréversible. Vous ne pourrez plus vous connecter tant qu'un
-                            administrateur ne créera pas un nouveau compte.
-                        </p>
+                        <h3 className="font-bold text-red-700 mb-1">{tr.profile.deleteAccount}</h3>
+                        <p className="text-sm text-gray-600 mb-4">{tr.profile.deleteWarning}</p>
 
                         <div className="space-y-3">
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">Motif</label>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.profile.fields.reason}</label>
                                 <select
                                     value={deleteReason}
                                     onChange={(e) => setDeleteReason(e.target.value as AccountDeletionReason)}
                                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                                 >
-                                    <option value="resignation">Démission</option>
-                                    <option value="retirement">Retraite</option>
-                                    <option value="other">Autre</option>
+                                    <option value="resignation">{tr.profile.reasonOptions.resignation}</option>
+                                    <option value="retirement">{tr.profile.reasonOptions.retirement}</option>
+                                    <option value="other">{tr.profile.reasonOptions.other}</option>
                                 </select>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 mb-1">Précisions (optionnel)</label>
+                                <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.profile.fields.notes}</label>
                                 <textarea
                                     value={deleteNotes}
                                     onChange={(e) => setDeleteNotes(e.target.value)}
@@ -369,11 +364,11 @@ export default function ProfilePage() {
                                 />
                             </div>
 
-                            <Field label="Mot de passe actuel" value={deletePassword} onChange={setDeletePassword} type="password" />
+                            <Field label={tr.profile.fields.currentPassword} value={deletePassword} onChange={setDeletePassword} type="password" />
 
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 mb-1">
-                                    Tapez SUPPRIMER pour confirmer
+                                    {tr.profile.typeToConfirm(tr.profile.confirmWord)}
                                 </label>
                                 <input
                                     type="text"
@@ -397,14 +392,14 @@ export default function ProfilePage() {
                                     disabled={isDeletingAccount}
                                     className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                                 >
-                                    Annuler
+                                    {tr.profile.cancel}
                                 </button>
                                 <button
                                     onClick={handleDeleteAccount}
                                     disabled={isDeletingAccount}
                                     className="flex-1 bg-red-600 text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                                 >
-                                    {isDeletingAccount ? 'Suppression...' : 'Supprimer définitivement'}
+                                    {isDeletingAccount ? tr.profile.deleting : tr.profile.deleteForever}
                                 </button>
                             </div>
                         </div>
@@ -428,10 +423,11 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 }
 
 function InfoRow({ label, value }: { label: string; value: string | null }) {
+    const { tr } = useLang();
     return (
         <div className="flex justify-between py-2 border-b border-gray-100 last:border-0">
             <span className="text-sm text-gray-500">{label}</span>
-            <span className="text-sm font-medium text-gray-900">{value ?? '—'}</span>
+            <span className="text-sm font-medium text-gray-900">{value ?? tr.profile.dash}</span>
         </div>
     );
 }

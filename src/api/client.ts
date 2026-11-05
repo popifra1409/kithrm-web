@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { AxiosError, AxiosInstance } from 'axios';
+import type { Dict } from '../i18n/fr';
 
 export const TOKEN_STORAGE_KEY = 'kithrm_auth_token';
 
@@ -68,13 +69,18 @@ export interface ApiError {
   data?: Record<string, unknown>;
 }
 
-export function extractApiError(error: unknown): ApiError {
+/**
+ * `fallbacks` vient du dictionnaire affiché : le texte du serveur est renvoyé tel quel
+ * (il est en français jusqu'aux fichiers de langue Laravel), mais un serveur muet ne
+ * doit pas faire apparaître une phrase système figée dans une autre langue que l'écran.
+ */
+export function extractApiError(error: unknown, fallbacks: Dict['api']): ApiError {
   if (axios.isAxiosError(error)) {
     const err = error as AxiosError<{ message?: string; errors?: Record<string, string[]> }>;
 
     if (err.response?.data) {
       return {
-        message: err.response.data.message ?? 'Une erreur est survenue.',
+        message: err.response.data.message ?? fallbacks.generic,
         status: err.response.status,
         errors: err.response.data.errors,
         data: err.response.data as Record<string, unknown>,
@@ -82,13 +88,13 @@ export function extractApiError(error: unknown): ApiError {
     }
 
     if (err.code === 'ECONNABORTED') {
-      return { message: 'La requête a expiré. Vérifiez votre connexion.' };
+      return { message: fallbacks.timeout };
     }
 
     if (!err.response) {
-      return { message: "Impossible de joindre le serveur. Vérifiez votre connexion internet." };
+      return { message: fallbacks.unreachable };
     }
   }
 
-  return { message: 'Une erreur inattendue est survenue.' };
+  return { message: fallbacks.unexpected };
 }

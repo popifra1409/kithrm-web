@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { frToIso, isoToFr, maskFrDate } from '../lib/dates';
+import { useLang } from '../context/LangContext';
 
 interface DateInputProps {
     label: string;
@@ -31,6 +32,7 @@ export default function DateInput({
     labelClassName = DEFAULT_LABEL,
     inputClassName = flagged ? FLAGGED_INPUT : DEFAULT_INPUT,
 }: DateInputProps) {
+    const { tr } = useLang();
     const [text, setText] = useState(isoToFr(value));
 
     // Le texte n'est resynchronisé que si la valeur du parent diffère de ce qu'il
@@ -56,14 +58,14 @@ export default function DateInput({
                 inputMode="numeric"
                 value={text}
                 onChange={handleChange}
-                placeholder="JJ-MM-AAAA"
+                placeholder={tr.date.placeholder}
                 maxLength={10}
                 autoComplete="off"
                 className={isInvalid ? inputClassName.replace('border-gray-300', 'border-red-500') : inputClassName}
             />
-            {isInvalid && <p className="text-xs text-red-600 mt-1">Date invalide. Format attendu : JJ-MM-AAAA.</p>}
+            {isInvalid && <p className="text-xs text-red-600 mt-1">{tr.date.invalid}</p>}
             {flagged && !isInvalid && (
-                <p className="text-[11px] font-semibold text-red-600 mt-1">↩️ À corriger — demandé par les RH</p>
+                <p className="text-[11px] font-semibold text-red-600 mt-1">{tr.date.flagged}</p>
             )}
         </div>
     );

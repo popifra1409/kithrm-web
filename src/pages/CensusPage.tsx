@@ -24,19 +24,8 @@ import type { DraftStage } from '../lib/censusDraftStore';
 import { useConnection } from '../lib/connection';
 import { useAuth } from '../context/AuthContext';
 import { useCensusLock } from '../context/CensusLockContext';
-
-const RELATIONSHIP_LABELS: Record<string, string> = {
-  spouse: 'Conjoint(e)',
-  child: 'Enfant',
-  father: 'Père',
-  mother: 'Mère',
-};
-
-const DIPLOMA_TYPE_LABELS: Record<string, string> = {
-  recruitment_diploma: 'Diplôme de Recrutement',
-  highest_diploma: 'Diplôme le Plus Élevé',
-  training: 'Formation',
-};
+import { useLang } from '../context/LangContext';
+import type { Dict } from '../i18n/fr';
 
 const EMPTY_DEPENDENT: CensusDraftDependent = {
   existing_id: null,
@@ -80,10 +69,11 @@ function isAttached(file?: File | null): boolean {
 }
 
 /** L'ayant droit tel que l'employé le lit sur sa ligne, pour nommer la pièce manquante. */
-function dependentWho(d: CensusDraftDependent): string {
+function dependentWho(d: CensusDraftDependent, tr: Dict): string {
+  const labels: Record<string, string> = tr.dependents.relationships;
   const name = `${d.first_name ?? ''} ${d.last_name ?? ''}`.trim();
 
-  return name !== '' ? `${RELATIONSHIP_LABELS[d.relationship]} « ${name} »` : RELATIONSHIP_LABELS[d.relationship];
+  return name !== '' ? tr.census.labels.personNamed(labels[d.relationship], name) : labels[d.relationship];
 }
 
 function hasFamilyAct(dependents: CensusDraftDependent[]): boolean {
@@ -105,12 +95,7 @@ type Stage = DraftStage | 'review';
  * thématiques, mais la navigation reste libre (aucun champ ne bloque « Continuer »)
  * pour que l'employé repasse où il veut sans être retenu.
  */
-const FORM_STAGES: { key: Stage; label: string }[] = [
-  { key: 'identity', label: 'Identité' },
-  { key: 'pay', label: 'Solde & contrat' },
-  { key: 'org', label: 'Affectation' },
-  { key: 'family', label: 'Entourage' },
-];
+const FORM_STAGE_KEYS: DraftStage[] = ['identity', 'pay', 'org', 'family'];
 
 /**
  * À quelle étape se trouve chacun des champs que les RH peuvent renvoyer.
@@ -197,10 +182,15 @@ const nameOf = (list: { id: number; name: string }[] | undefined, id: string) =>
 export default function CensusPage() {
   const { online } = useConnection();
   const { user } = useAuth();
+  const { tr } = useLang();
+  const relationshipLabels: Record<string, string> = tr.dependents.relationships;
+  const diplomaTypeLabels: Record<string, string> = tr.diplomas.types;
+  const formStages = FORM_STAGE_KEYS.map((key) => ({ key, label: tr.census.stages[key] }));
   const censusLock = useCensusLock();
   // L'employé qu'on renvoie ici depuis « Déclarer un ayant droit » ou « Ajouter un
-  // diplôme » doit comprendre pourquoi il atterrit sur le recensement.
-  const lockNoticeText = (useLocation().state as { lockNotice?: string } | null)?.lockNotice ?? null;
+  // diplôme » doit comprendre pourquoi il atterrit sur le recensement. La raison voyage
+  // par clé : changée de langue sous ses yeux, l'explication doit suivre l'écran.
+  const lockNoticeKind = (useLocation().state as { lockNoticeKind?: 'dependent' | 'diploma' } | null)?.lockNoticeKind ?? null;
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
   const [draft, setDraft] = useState<CensusDraft | null>(null);
@@ -300,7 +290,7 @@ export default function CensusPage() {
       if (isNetworkError(error)) {
         setDraftSavedOffline(Boolean(await loadCensusDraft()));
       } else {
-        alert(extractApiError(error).message);
+        alert(extractApiError(error, tr.api).message);
       }
     } finally {
       setIsLoading(false);
@@ -339,16 +329,16 @@ export default function CensusPage() {
     if (!draft || !recorded) return [];
 
     const candidates: { key: 'bank_name' | 'bank_account_number' | 'cnps_number'; label: string }[] = [
-      { key: 'bank_name', label: 'nom de la banque' },
-      { key: 'bank_account_number', label: 'numéro de compte' },
-      { key: 'cnps_number', label: 'numéro CNPS' },
+      { key: 'bank_name', label: tr.census.bankChanges.bank_name },
+      { key: 'bank_account_number', label: tr.census.bankChanges.bank_account_number },
+      { key: 'cnps_number', label: tr.census.bankChanges.cnps_number },
     ];
 
     return candidates.filter(({ key }) => {
       const submitted = draft.personal[key].trim();
       return submitted !== '' && submitted !== (recorded[key] ?? '').trim();
     });
-  }, [draft?.personal.bank_name, draft?.personal.bank_account_number, draft?.personal.cnps_number, current?.current_data]);
+  }, [draft?.personal.bank_name, draft?.personal.bank_account_number, draft?.personal.cnps_number, current?.current_data, tr]);
 
   // La reconnaissance porte sur le jeu exact de champs modifiés : toute nouvelle
   // modification des coordonnées invalide l'accord précédent.
@@ -370,8 +360,8 @@ export default function CensusPage() {
 
   // Listes filtrées de la cascade (voir lib/organization.ts)
   const cascade = useMemo(
-    () => (orgOptions && draft ? computeCascade(orgOptions, draft.organizational) : null),
-    [orgOptions, draft?.organizational]
+    () => (orgOptions && draft ? computeCascade(orgOptions, draft.organizational, tr.org.outOfHierarchy) : null),
+    [orgOptions, draft?.organizational, tr]
   );
 
   function updatePersonal(field: keyof CensusDraft['personal'], value: string) {
@@ -458,13 +448,13 @@ export default function CensusPage() {
       setStage('family');
       alert(
         PARENT_RELATIONS.includes(missingAct.relationship)
-          ? `Pour déclarer ${dependentWho(missingAct)}, joins TON acte de naissance : c'est lui qui prouve la filiation. Une seule pièce suffit pour le père et la mère.`
-          : `${dependentWho(missingAct)} : son acte de naissance n'est pas joint. Ouvre sa ligne et sélectionne le fichier — une pièce vide ou trop lourde est écartée par le serveur sans que le formulaire le sache.`,
+          ? tr.census.alerts.actParentRequired(dependentWho(missingAct, tr))
+          : tr.census.alerts.actMissing(dependentWho(missingAct, tr)),
       );
       return;
     }
     if (activeDiplomas.some((d) => !d.existing_id && !isAttached(d.document))) {
-      alert('Un document justificatif est requis pour chaque nouveau diplôme.');
+      alert(tr.census.alerts.diplomaDocForEach);
       return;
     }
 
@@ -472,7 +462,10 @@ export default function CensusPage() {
       setStage('pay');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       alert(
-        `Tu as modifié ${bankChanges.map((c) => c.label).join(', ')}. Coche la reconnaissance de l'avertissement dans la section « Informations Bancaires & CNPS » avant de vérifier et soumettre.`
+        tr.census.alerts.bankChanges(
+          bankChanges.map((c) => c.label).join(', '),
+          tr.census.sections.bank
+        )
       );
       return;
     }
@@ -501,9 +494,7 @@ export default function CensusPage() {
     if (!current?.campaign || !draft) return;
 
     if (!online) {
-      alert(
-        'Connexion internet introuvable : rien ne peut être envoyé pour le moment. Ton brouillon est enregistré sur cet appareil, tu pourras soumettre dès que le réseau revient.'
-      );
+      alert(tr.census.alerts.offlineSubmit);
       return;
     }
 
@@ -517,14 +508,14 @@ export default function CensusPage() {
       setBankAckFor(null);
       setRefusedProblems([]);
       setRefusedFields([]);
-      alert('Ton recensement a été soumis pour validation.');
+      alert(tr.census.alerts.submitted);
       // L'état partagé est relu après l'envoi : le verrou reste (la déclaration n'est
       // validée qu'après le passage des RH), mais les listes affichent le bon message.
       await censusLock.refresh();
       setStage('identity');
       load();
     } catch (error) {
-      const apiError = extractApiError(error);
+      const apiError = extractApiError(error, tr.api);
       const refused = apiError.errors ?? {};
       const keys = Object.keys(refused);
 
@@ -565,16 +556,13 @@ export default function CensusPage() {
       return (
         <div className="max-w-md mx-auto p-8 text-center">
           <p className="text-4xl mb-3">📶</p>
-          <h1 className="text-lg font-bold text-[#1e3a5f]">Connexion internet nécessaire</h1>
-          <p className="text-sm text-gray-600 mt-2">
-            Impossible d'ouvrir la campagne de recensement sans réseau. Ton brouillon est
-            enregistré sur cet appareil et rien n'est perdu.
-          </p>
+          <h1 className="text-lg font-bold text-[#1e3a5f]">{tr.census.screens.offlineTitle}</h1>
+          <p className="text-sm text-gray-600 mt-2">{tr.census.screens.offlineText}</p>
           <button
             onClick={load}
             className="mt-5 w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
           >
-            Réessayer
+            {tr.census.labels.retry}
           </button>
         </div>
       );
@@ -583,7 +571,7 @@ export default function CensusPage() {
     return (
       <div className="p-10 text-center text-gray-500">
         <p className="text-4xl mb-3">📋</p>
-        <p>{current?.message ?? "Aucune campagne de recensement n'est actuellement ouverte."}</p>
+        <p>{current?.message ?? tr.census.screens.noCampaign}</p>
       </div>
     );
   }
@@ -596,7 +584,7 @@ export default function CensusPage() {
     return (
       <div className="p-10 text-center">
         <p className="text-4xl mb-3">⏳</p>
-        <p className="font-bold text-gray-900">Recensement soumis</p>
+        <p className="font-bold text-gray-900">{tr.census.screens.submitted}</p>
         <p className="text-sm text-gray-500 mt-1">{current.stage_label}</p>
       </div>
     );
@@ -606,8 +594,8 @@ export default function CensusPage() {
     return (
       <div className="p-10 text-center">
         <p className="text-4xl mb-3">✅</p>
-        <p className="font-bold text-gray-900">Recensement validé</p>
-        <p className="text-sm text-gray-500 mt-1">Vos informations ont été mises à jour.</p>
+        <p className="font-bold text-gray-900">{tr.census.screens.validated}</p>
+        <p className="text-sm text-gray-500 mt-1">{tr.census.screens.validatedText}</p>
       </div>
     );
   }
@@ -632,10 +620,8 @@ export default function CensusPage() {
 
     return (
       <div className="max-w-2xl mx-auto p-4 sm:p-8">
-        <h1 className="text-lg font-bold text-[#1e3a5f] mb-1">Récapitulatif</h1>
-        <p className="text-sm text-gray-500 mb-4">
-          Vérifiez attentivement vos informations avant de soumettre définitivement.
-        </p>
+        <h1 className="text-lg font-bold text-[#1e3a5f] mb-1">{tr.census.stages.review}</h1>
+        <p className="text-sm text-gray-500 mb-4">{tr.census.screens.reviewIntro}</p>
 
         {draft.photo && (
           <div className="flex justify-center mb-4">
@@ -643,84 +629,83 @@ export default function CensusPage() {
           </div>
         )}
 
-        <Section title="Informations Personnelles">
-          <RecapRow label="Matricule Fonction Publique" value={draft.personal.matricule_fonction_publique.trim()} />
-          <RecapRow label="Nom" value={draft.personal.last_name} />
-          <RecapRow label="Prénom" value={draft.personal.first_name} />
-          <RecapRow label="Sexe" value={draft.personal.gender} />
-          <RecapRow label="Date de naissance" value={isoToFr(draft.personal.birth_date)} />
-          <RecapRow label="Statut marital" value={draft.personal.marital_status} />
-          <RecapRow label="Enfants < 6 ans" value={draft.personal.children_under_6} />
-          <RecapRow label="Total enfants" value={draft.personal.total_children} />
-          <RecapRow label="N° Carte d'identité" value={draft.personal.id_card_number} />
-          <RecapRow label="Date de recrutement" value={isoToFr(draft.personal.recruitment_date)} />
-          <RecapRow label="Date de prise de service" value={isoToFr(draft.personal.service_start_date)} />
-          <RecapRow label="Téléphone" value={draft.personal.phone} />
-          <RecapRow label="Adresse email" value={draft.personal.email} />
-          <RecapRow label="Adresse" value={draft.personal.address} />
-          <RecapRow label="Ville" value={draft.personal.city} />
+        <Section title={tr.census.sections.personal}>
+          <RecapRow label={tr.census.fields.matriculeFp} value={draft.personal.matricule_fonction_publique.trim()} />
+          <RecapRow label={tr.census.fields.lastName} value={draft.personal.last_name} />
+          <RecapRow label={tr.census.fields.firstName} value={draft.personal.first_name} />
+          <RecapRow label={tr.census.fields.gender} value={draft.personal.gender} />
+          <RecapRow label={tr.census.fields.birthDate} value={isoToFr(draft.personal.birth_date)} />
+          <RecapRow label={tr.census.fields.maritalStatus} value={draft.personal.marital_status} />
+          <RecapRow label={tr.census.fields.childrenUnder6} value={draft.personal.children_under_6} />
+          <RecapRow label={tr.census.fields.totalChildren} value={draft.personal.total_children} />
+          <RecapRow label={tr.census.fields.idCard} value={draft.personal.id_card_number} />
+          <RecapRow label={tr.census.fields.recruitmentDate} value={isoToFr(draft.personal.recruitment_date)} />
+          <RecapRow label={tr.census.fields.serviceStartDate} value={isoToFr(draft.personal.service_start_date)} />
+          <RecapRow label={tr.census.fields.phone} value={draft.personal.phone} />
+          <RecapRow label={tr.census.fields.email} value={draft.personal.email} />
+          <RecapRow label={tr.census.fields.address} value={draft.personal.address} />
+          <RecapRow label={tr.census.fields.city} value={draft.personal.city} />
         </Section>
 
-        <Section title="Classification Salariale">
-          <RecapRow label="Catégorie" value={draft.personal.category_number} />
-          <RecapRow label="Échelon" value={draft.personal.echelon_number} />
-          <RecapRow label="Indice (calculé)" value={indicePreview != null ? String(indicePreview) : ''} />
+        <Section title={tr.census.sections.classification}>
+          <RecapRow label={tr.census.fields.category} value={draft.personal.category_number} />
+          <RecapRow label={tr.census.fields.echelon} value={draft.personal.echelon_number} />
+          <RecapRow label={tr.census.fields.indiceCalculated} value={indicePreview != null ? String(indicePreview) : ''} />
         </Section>
 
-        <Section title="Contrat de travail & prise de service">
-          <RecapRow label="Numéro de contrat" value={draft.contract.contract_number.trim()} />
-          <RecapRow label="Type de contrat" value={current.current_data?.contract.contract_type ?? ''} />
-          <RecapRow label="Contrat joint" value={draft.contract.contract_document?.name ?? ''} />
-          <RecapRow label="Prise de service jointe" value={draft.contract.service_start_document?.name ?? ''} />
+        <Section title={tr.census.sections.contract}>
+          <RecapRow label={tr.census.fields.contractNumber} value={draft.contract.contract_number.trim()} />
+          <RecapRow label={tr.census.fields.contractType} value={current.current_data?.contract.contract_type ?? ''} />
+          <RecapRow label={tr.census.fields.contractAttached} value={draft.contract.contract_document?.name ?? ''} />
+          <RecapRow label={tr.census.fields.serviceStartAttached} value={draft.contract.service_start_document?.name ?? ''} />
         </Section>
 
-        <Section title="Banque & CNPS">
-          <RecapRow label="Banque" value={draft.personal.bank_name} />
-          <RecapRow label="N° de compte" value={draft.personal.bank_account_number} />
-          <RecapRow label="N° CNPS" value={draft.personal.cnps_number} />
+        <Section title={tr.census.sections.bank}>
+          <RecapRow label={tr.census.fields.bank} value={draft.personal.bank_name} />
+          <RecapRow label={tr.census.fields.bankAccountShort} value={draft.personal.bank_account_number} />
+          <RecapRow label={tr.census.fields.cnpsShort} value={draft.personal.cnps_number} />
           {bankChanges.length > 0 && (
             <p className="text-xs text-amber-700 mt-2">
-              ⚠️ Changement déclaré : {bankChanges.map((c) => c.label).join(', ')}. Avertissement sur le virement acté
-              — une demande de modification des informations bancaires doit accompagner le dossier.
+              {tr.census.bankWarning.recap(bankChanges.map((c) => c.label).join(', '))}
             </p>
           )}
         </Section>
 
-        <Section title="Affectation Organisationnelle">
-          <RecapRow label="Branche" value={draft.organizational.branch_type === 'administrative' ? 'Administrative' : 'Médicale'} />
-          <RecapRow label="Direction" value={nameOf(orgOptions?.directions, draft.organizational.direction_id)} />
+        <Section title={tr.census.sections.organization}>
+          <RecapRow label={tr.census.fields.branch} value={draft.organizational.branch_type === 'administrative' ? tr.census.branchNames.administrative : tr.census.branchNames.medical} />
+          <RecapRow label={tr.census.fields.direction} value={nameOf(orgOptions?.directions, draft.organizational.direction_id)} />
           {draft.organizational.branch_type === 'administrative' ? (
-            <RecapRow label="Sous-direction" value={nameOf(orgOptions?.sub_directions, draft.organizational.sub_direction_id)} />
+            <RecapRow label={tr.census.fields.subDirection} value={nameOf(orgOptions?.sub_directions, draft.organizational.sub_direction_id)} />
           ) : (
-            <RecapRow label="Département" value={nameOf(orgOptions?.departments, draft.organizational.department_id)} />
+            <RecapRow label={tr.census.fields.department} value={nameOf(orgOptions?.departments, draft.organizational.department_id)} />
           )}
-          <RecapRow label="Service" value={nameOf(orgOptions?.services, draft.organizational.service_id)} />
-          <RecapRow label="Secteur / Unité" value={nameOf(orgOptions?.sectors, draft.organizational.sector_id)} />
-          <RecapRow label="Corps de métier" value={nameOf(orgOptions?.trade_bodies, draft.organizational.trade_body_id)} />
-          <RecapRow label="Qualification" value={nameOf(orgOptions?.qualifications, draft.organizational.qualification_id)} />
-          <RecapRow label="Poste hiérarchique" value={nameOf(orgOptions?.job_titles, draft.organizational.job_title_id)} />
+          <RecapRow label={tr.census.fields.service} value={nameOf(orgOptions?.services, draft.organizational.service_id)} />
+          <RecapRow label={tr.census.fields.sector} value={nameOf(orgOptions?.sectors, draft.organizational.sector_id)} />
+          <RecapRow label={tr.census.fields.tradeBody} value={nameOf(orgOptions?.trade_bodies, draft.organizational.trade_body_id)} />
+          <RecapRow label={tr.census.fields.qualification} value={nameOf(orgOptions?.qualifications, draft.organizational.qualification_id)} />
+          <RecapRow label={tr.census.fields.jobTitle} value={nameOf(orgOptions?.job_titles, draft.organizational.job_title_id)} />
           <RecapRow
-            label="Type de personnel"
+            label={tr.census.fields.personnelType}
             value={orgOptions?.personnel_types.find((t) => t.value === draft.organizational.personnel_type)?.label ?? ''}
           />
           <RecapRow
-            label="Statut administratif"
+            label={tr.census.fields.administrativeStatus}
             value={orgOptions?.administrative_statuses.find((s) => s.value === draft.organizational.administrative_status)?.label ?? ''}
           />
         </Section>
 
-        <Section title={`Ayants Droit (${activeDependents.length})`}>
+        <Section title={`${tr.census.sections.dependents} (${activeDependents.length})`}>
           {activeDependents.length === 0 ? (
-            <p className="text-sm text-gray-400 italic">Aucun.</p>
+            <p className="text-sm text-gray-400 italic">{tr.census.labels.none}</p>
           ) : (
             <div className="space-y-2">
               {activeDependents.map((dep, i) => (
                 <div key={i} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm font-semibold text-gray-900">
-                    {dep.last_name} {dep.first_name} {dep.existing_id ? '' : '· nouveau'}
+                    {dep.last_name} {dep.first_name} {dep.existing_id ? '' : tr.census.labels.newSuffix}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {RELATIONSHIP_LABELS[dep.relationship]} · né(e) le {isoToFr(dep.birth_date)}
+                    {relationshipLabels[dep.relationship]} {tr.census.labels.bornOn(isoToFr(dep.birth_date))}
                   </p>
                 </div>
               ))}
@@ -728,18 +713,18 @@ export default function CensusPage() {
           )}
         </Section>
 
-        <Section title={`Diplômes & Formations (${activeDiplomas.length})`}>
+        <Section title={`${tr.census.sections.diplomas} (${activeDiplomas.length})`}>
           {activeDiplomas.length === 0 ? (
-            <p className="text-sm text-gray-400 italic">Aucun.</p>
+            <p className="text-sm text-gray-400 italic">{tr.census.labels.none}</p>
           ) : (
             <div className="space-y-2">
               {activeDiplomas.map((dip, i) => (
                 <div key={i} className="bg-gray-50 rounded-lg p-3">
                   <p className="text-sm font-semibold text-gray-900">
-                    {dip.title} {dip.existing_id ? '' : '· nouveau'}
+                    {dip.title} {dip.existing_id ? '' : tr.census.labels.newSuffix}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {DIPLOMA_TYPE_LABELS[dip.type]} · {dip.institution} ({dip.year_obtained})
+                    {diplomaTypeLabels[dip.type]} · {dip.institution} ({dip.year_obtained})
                   </p>
                 </div>
               ))}
@@ -753,32 +738,25 @@ export default function CensusPage() {
             disabled={isSubmitting}
             className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
           >
-            ← Retour pour corriger
+            {tr.census.labels.backToForm}
           </button>
           <button
             onClick={handleConfirmSubmit}
             disabled={isSubmitting || !online}
             className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60"
           >
-            {isSubmitting ? 'Envoi...' : online ? 'Confirmer et Soumettre' : 'Hors ligne — envoi impossible'}
+            {isSubmitting ? tr.census.labels.sending : online ? tr.census.labels.confirmSubmit : tr.census.labels.offlineSubmit}
           </button>
         </div>
-        {!online && (
-          <p className="text-xs text-red-600 text-center mt-2">
-            Le réseau est revenu ? Le bouton se réactive tout seul. Ton brouillon reste sur cet appareil.
-          </p>
-        )}
-        <p className="text-xs text-gray-400 text-center mt-3">
-          ✏️ Ton brouillon est enregistré sur cet appareil à chaque modification : tu peux fermer la page
-          ou perdre la connexion, rien n'est perdu.
-        </p>
+        {!online && <p className="text-xs text-red-600 text-center mt-2">{tr.census.labels.offlineButtonNote}</p>}
+        <p className="text-xs text-gray-400 text-center mt-3">{tr.census.labels.draftNoteReview}</p>
       </div>
     );
   }
 
-  const stageIndex = FORM_STAGES.findIndex((s) => s.key === stage);
-  const prevStage = stageIndex > 0 ? FORM_STAGES[stageIndex - 1].key : null;
-  const nextStage = stageIndex < FORM_STAGES.length - 1 ? FORM_STAGES[stageIndex + 1] : null;
+  const stageIndex = formStages.findIndex((s) => s.key === stage);
+  const prevStage = stageIndex > 0 ? formStages[stageIndex - 1].key : null;
+  const nextStage = stageIndex < formStages.length - 1 ? formStages[stageIndex + 1] : null;
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8">
@@ -791,7 +769,7 @@ export default function CensusPage() {
           {current.rejection_reason && <p className="text-sm text-red-700 mt-1">{current.rejection_reason}</p>}
           {(current.rejection_fields ?? []).length > 0 && (
             <div className="mt-3">
-              <p className="text-xs font-semibold text-red-700">Champs à corriger (clique pour y aller) :</p>
+              <p className="text-xs font-semibold text-red-700">{tr.census.screens.rejectionFields}</p>
               <ul className="mt-1.5 flex flex-wrap gap-1.5">
                 {current.rejection_fields!.map((field) => (
                   <li key={field.key}>
@@ -807,41 +785,38 @@ export default function CensusPage() {
               </ul>
             </div>
           )}
-          <p className="text-xs text-red-600 mt-2 italic">
-            Les champs concernés sont surlignés en rouge ci-dessous. Corrigez-les et resoumettez.
-          </p>
+          <p className="text-xs text-red-600 mt-2 italic">{tr.census.screens.rejectionHint}</p>
         </div>
       )}
 
       {wasCanceled && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-          <p className="font-semibold text-sm text-amber-800">↩️ {current.stage_label ?? 'Recensement annulé par les RH'}</p>
+          <p className="font-semibold text-sm text-amber-800">↩️ {current.stage_label ?? tr.census.screens.canceledFallback}</p>
           {current.cancellation_reason && <p className="text-sm text-amber-700 mt-1">{current.cancellation_reason}</p>}
-          <p className="text-xs text-amber-600 mt-1 italic">Vérifiez vos informations ci-dessous et resoumettez.</p>
+          <p className="text-xs text-amber-600 mt-1 italic">{tr.census.screens.canceledHint}</p>
         </div>
       )}
 
-      {lockNoticeText && (
+      {lockNoticeKind && (
         <div className="bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-xl p-4 mb-4">
-          <p className="font-semibold text-sm text-[#1e3a5f]">📋 Cette déclaration se fait dans le recensement</p>
-          <p className="text-xs text-gray-600 mt-1">{lockNoticeText}</p>
+          <p className="font-semibold text-sm text-[#1e3a5f]">{tr.censusLock.redirectedTitle}</p>
+          <p className="text-xs text-gray-600 mt-1">{tr.censusLock[lockNoticeKind]}</p>
         </div>
       )}
 
       {restoredAt && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="flex-1">
-            <p className="font-semibold text-sm text-blue-800">📝 Brouillon retrouvé sur cet appareil</p>
+            <p className="font-semibold text-sm text-blue-800">{tr.census.screens.restoredTitle}</p>
             <p className="text-xs text-blue-700 mt-1">
-              Enregistré le {new Date(restoredAt).toLocaleString('fr-FR')}. Tes saisies ont été
-              conservées et tu peux continuer directement.
+              {tr.census.screens.restoredText(new Date(restoredAt).toLocaleString(tr.date.locale))}
             </p>
           </div>
           <button
             onClick={discardRestoredDraft}
             className="text-xs font-semibold text-blue-800 border border-blue-300 rounded-lg px-3 py-2 hover:bg-blue-100 shrink-0"
           >
-            Repartir des données du serveur
+            {tr.census.labels.discardDraft}
           </button>
         </div>
       )}
@@ -853,14 +828,14 @@ export default function CensusPage() {
           <div className="flex items-start justify-between gap-3">
             <p className="font-semibold text-sm text-red-800">
               {refusedProblems.length === 1
-                ? "Un champ bloque encore l'envoi"
-                : `${refusedProblems.length} champs bloquent l'envoi`}
+                ? tr.census.labels.refusedOne
+                : tr.census.labels.refusedMany(refusedProblems.length)}
             </p>
             <button
               onClick={() => setRefusedProblems([])}
               className="text-xs font-semibold text-red-800 hover:underline shrink-0"
             >
-              Masquer
+              {tr.census.labels.hide}
             </button>
           </div>
 
@@ -873,30 +848,29 @@ export default function CensusPage() {
           </ul>
 
           <p className="text-xs text-red-700/80 mt-2">
-            Rien n'est perdu : ton brouillon reste sur cet appareil. Corrige ces points, puis reviens à
-            Récapitulatif pour confirmer l'envoi.
+            {tr.census.labels.refusedFooter(tr.census.stages.review)}
           </p>
         </div>
       )}
 
-      <Section title="Photo" showIf={stage === 'identity'} flagged={flaggedFields.has('photo')}>
+      <Section title={tr.census.sections.photo} showIf={stage === 'identity'} flagged={flaggedFields.has('photo')}>
         <PhotoCaptureInput
-          label="Photo de profil"
+          label={tr.census.fields.photoProfile}
           file={draft.photo}
           onChange={(f) => setDraft((d) => (d ? { ...d, photo: f } : d))}
-          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES)}
+          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES, tr.uploads)}
           maxBytes={MAX_UPLOAD_BYTES}
         />
         {!draft.photo && current.current_data?.personal.photo_url && (
           <div className="mt-3 flex items-center gap-2">
             <img src={current.current_data.personal.photo_url} alt="" className="w-12 h-12 rounded-full object-cover" />
-            <span className="text-xs text-gray-500">Photo actuelle (laissez vide pour la conserver)</span>
+            <span className="text-xs text-gray-500">{tr.census.hints.currentPhoto}</span>
           </div>
         )}
       </Section>
 
       <Section
-        title="Informations Personnelles"
+        title={tr.census.sections.personal}
         showIf={stage === 'identity'}
         flagged={
           flaggedFields.has('matricule_fonction_publique') ||
@@ -918,26 +892,26 @@ export default function CensusPage() {
       >
         <div className="space-y-3">
           <Field
-            label="Matricule Fonction Publique"
+            label={tr.census.fields.matriculeFp}
             value={draft.personal.matricule_fonction_publique}
             onChange={(v) => updatePersonal('matricule_fonction_publique', v)}
             onBlur={() => updatePersonal('matricule_fonction_publique', draft.personal.matricule_fonction_publique.trim())}
             flagged={flaggedFields.has('matricule_fonction_publique')}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Nom" value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} flagged={flaggedFields.has('last_name')} />
-            <Field label="Prénom" value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} flagged={flaggedFields.has('first_name')} />
+            <Field label={tr.census.fields.lastName} value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} flagged={flaggedFields.has('last_name')} />
+            <Field label={tr.census.fields.firstName} value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} flagged={flaggedFields.has('first_name')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
-              label="Sexe"
+              label={tr.census.fields.gender}
               value={draft.personal.gender}
               onChange={(v) => updatePersonal('gender', v)}
-              options={[{ value: 'M', label: 'Masculin' }, { value: 'F', label: 'Féminin' }]}
+              options={[{ value: 'M', label: tr.dependents.male }, { value: 'F', label: tr.dependents.female }]}
               flagged={flaggedFields.has('gender')}
             />
             <DateInput
-              label="Date de naissance"
+              label={tr.census.fields.birthDate}
               value={draft.personal.birth_date}
               onChange={(v) => updatePersonal('birth_date', v)}
               flagged={flaggedFields.has('birth_date')}
@@ -945,63 +919,62 @@ export default function CensusPage() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
-              label="Statut marital"
+              label={tr.census.fields.maritalStatus}
               value={draft.personal.marital_status}
               onChange={(v) => updatePersonal('marital_status', v)}
               options={[
-                { value: 'single', label: 'Célibataire' },
-                { value: 'married', label: 'Marié(e)' },
-                { value: 'divorced', label: 'Divorcé(e)' },
-                { value: 'widowed', label: 'Veuf/Veuve' },
+                { value: 'single', label: tr.census.marital.single },
+                { value: 'married', label: tr.census.marital.married },
+                { value: 'divorced', label: tr.census.marital.divorced },
+                { value: 'widowed', label: tr.census.marital.widowed },
               ]}
               flagged={flaggedFields.has('marital_status')}
             />
             <Field
-              label="N° Carte d'identité"
+              label={tr.census.fields.idCard}
               value={draft.personal.id_card_number}
               onChange={(v) => updatePersonal('id_card_number', v)}
               flagged={flaggedFields.has('id_card_number')}
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Enfants < 6 ans" value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" flagged={flaggedFields.has('children_under_6')} />
-            <Field label="Total enfants" value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" flagged={flaggedFields.has('total_children')} />
+            <Field label={tr.census.fields.childrenUnder6} value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" flagged={flaggedFields.has('children_under_6')} />
+            <Field label={tr.census.fields.totalChildren} value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" flagged={flaggedFields.has('total_children')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateInput
-              label="Date de recrutement"
+              label={tr.census.fields.recruitmentDate}
               value={draft.personal.recruitment_date}
               onChange={(v) => updatePersonal('recruitment_date', v)}
               flagged={flaggedFields.has('recruitment_date')}
             />
             <DateInput
-              label="Date de prise de service"
+              label={tr.census.fields.serviceStartDate}
               value={draft.personal.service_start_date}
               onChange={(v) => updatePersonal('service_start_date', v)}
               flagged={flaggedFields.has('service_start_date')}
             />
           </div>
-          <Field label="Téléphone" value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} flagged={flaggedFields.has('phone')} />
-          <Field label="Adresse email" value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
-          <Field label="Adresse" value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} flagged={flaggedFields.has('address')} />
-          <Field label="Ville" value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} flagged={flaggedFields.has('city')} />
+          <Field label={tr.census.fields.phone} value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} flagged={flaggedFields.has('phone')} />
+          <Field label={tr.census.fields.email} value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
+          <Field label={tr.census.fields.address} value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} flagged={flaggedFields.has('address')} />
+          <Field label={tr.census.fields.city} value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} flagged={flaggedFields.has('city')} />
         </div>
       </Section>
 
       <Section
-        title="Classification Salariale"
+        title={tr.census.sections.classification}
         showIf={stage === 'pay'}
         flagged={flaggedFields.has('category_number') || flaggedFields.has('echelon_number')}
       >
         <p className="text-xs text-gray-500 mb-3">
           {salaryClassification.classification_type === 'cameroon'
-            ? 'Nomenclature camerounaise (fonctionnaires).'
-            : 'Classification numérique (contractuels).'}{' '}
-          L'indice se calcule automatiquement.
+            ? tr.census.notes.classificationCameroon
+            : tr.census.notes.classificationContract}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
           <SelectField
-            label="Catégorie"
+            label={tr.census.fields.category}
             value={draft.personal.category_number}
             onChange={(v) => {
               updatePersonal('category_number', v);
@@ -1011,7 +984,7 @@ export default function CensusPage() {
             flagged={flaggedFields.has('category_number')}
           />
           <SelectField
-            label="Échelon"
+            label={tr.census.fields.echelon}
             value={draft.personal.echelon_number}
             onChange={(v) => updatePersonal('echelon_number', v)}
             options={Object.entries(echelonOptions).map(([value, label]) => ({ value, label }))}
@@ -1019,12 +992,12 @@ export default function CensusPage() {
           />
         </div>
         <div className="p-3 rounded-lg bg-blue-50 text-sm text-blue-800">
-          Indice : <span className="font-bold">{indicePreview ?? '—'}</span>
+          {tr.census.fields.indice} <span className="font-bold">{indicePreview ?? tr.census.labels.dash}</span>
         </div>
       </Section>
 
       <Section
-        title="Contrat de travail & prise de service"
+        title={tr.census.sections.contract}
         showIf={stage === 'pay'}
         flagged={
           flaggedFields.has('contract_number') ||
@@ -1035,51 +1008,48 @@ export default function CensusPage() {
         <div className="space-y-3">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field
-              label="Numéro de contrat"
+              label={tr.census.fields.contractNumber}
               value={draft.contract.contract_number}
               onChange={(v) => patchContract({ contract_number: v })}
               onBlur={() => patchContract({ contract_number: draft.contract.contract_number.trim() })}
-              placeholder="Ex: CT-2024-001"
+              placeholder={tr.census.fields.contractNumberPlaceholder}
               flagged={flaggedFields.has('contract_number')}
             />
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Type de contrat</label>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.census.fields.contractType}</label>
               <p className="text-sm text-gray-700 py-2">
-                {current.current_data?.contract.contract_type ?? '—'}
-                <span className="block text-xs text-gray-400">Fixé par les RH</span>
+                {current.current_data?.contract.contract_type ?? tr.census.labels.dash}
+                <span className="block text-xs text-gray-400">{tr.census.fields.contractFixedByHr}</span>
               </p>
             </div>
           </div>
 
           <FileField
-            label="Contrat de travail"
+            label={tr.census.fields.contractDocument}
             file={draft.contract.contract_document}
             onChange={(f) => patchContract({ contract_document: f })}
             flagged={flaggedFields.has('contract_document')}
           />
           {!draft.contract.contract_document && current.current_data?.contract.contract_document_url && (
-            <DocumentLink label="📄 Contrat déjà enregistré (joignez un fichier pour le remplacer)" url={current.current_data.contract.contract_document_url} />
+            <DocumentLink label={tr.census.modals.contractDocLink} url={current.current_data.contract.contract_document_url} />
           )}
 
           <FileField
-            label="Document de prise de service"
+            label={tr.census.fields.serviceStartDocument}
             file={draft.contract.service_start_document}
             onChange={(f) => patchContract({ service_start_document: f })}
             flagged={flaggedFields.has('service_start_document')}
           />
           {!draft.contract.service_start_document && current.current_data?.contract.service_start_document_url && (
-            <DocumentLink label="📄 Prise de service déjà enregistrée (joignez un fichier pour la remplacer)" url={current.current_data.contract.service_start_document_url} />
+            <DocumentLink label={tr.census.modals.serviceStartDocLink} url={current.current_data.contract.service_start_document_url} />
           )}
 
-          <p className="text-xs text-gray-400">
-            Champs facultatifs : sans numéro ni document, la soumission passe quand même et les RH vous la
-            réclameront à la vérification.
-          </p>
+          <p className="text-xs text-gray-400">{tr.census.hints.optionalContract}</p>
         </div>
       </Section>
 
       <Section
-        title="Informations Bancaires & CNPS"
+        title={tr.census.sections.bank}
         showIf={stage === 'pay'}
         flagged={
           flaggedFields.has('bank_name') ||
@@ -1089,19 +1059,19 @@ export default function CensusPage() {
       >
         <div className="space-y-3">
           <Field
-            label="Nom de la banque"
+            label={tr.census.fields.bankName}
             value={draft.personal.bank_name}
             onChange={(v) => updatePersonal('bank_name', v)}
             flagged={flaggedFields.has('bank_name')}
           />
           <Field
-            label="Numéro de compte"
+            label={tr.census.fields.bankAccount}
             value={draft.personal.bank_account_number}
             onChange={(v) => updatePersonal('bank_account_number', v)}
             flagged={flaggedFields.has('bank_account_number')}
           />
           <Field
-            label="Numéro CNPS"
+            label={tr.census.fields.cnps}
             value={draft.personal.cnps_number}
             onChange={(v) => updatePersonal('cnps_number', v)}
             flagged={flaggedFields.has('cnps_number')}
@@ -1109,17 +1079,21 @@ export default function CensusPage() {
 
           {bankChanges.length > 0 && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm font-bold text-amber-900">⚠️ Tu modifies tes coordonnées de paiement</p>
+              <p className="text-sm font-bold text-amber-900">{tr.census.bankWarning.title}</p>
               <p className="text-xs text-amber-800 mt-1">
                 {bankChanges
-                  .map((c) => `${c.label} → ${current.current_data?.personal[c.key]?.trim() || 'aucune valeur enregistrée'}`)
+                  .map(
+                    (c) =>
+                      `${c.label} → ${current.current_data?.personal[c.key]?.trim() || tr.census.bankWarning.noValue}`
+                  )
                   .join(' · ')}
               </p>
               <p className="text-xs text-amber-800 mt-2">
-                Si ces informations ne sont pas celles que la GRH a dans son dossier, <strong>ton salaire ne sera pas
-                viré</strong> tant que la différence n'est pas régularisée. Un changement avéré doit être accompagné
-                d'une <strong>demande de modification des informations bancaires adressée au Directeur Général</strong>
-                (avec un RIB à ton nom joint) : sans ce document, la valeur déjà enregistrée reste la référence.
+                {tr.census.bankWarning.intro}
+                <strong>{tr.census.bankWarning.bold1}</strong>
+                {tr.census.bankWarning.middle}
+                <strong>{tr.census.bankWarning.bold2}</strong>
+                {tr.census.bankWarning.ending}
               </p>
               <label className="flex items-start gap-2 mt-3">
                 <input
@@ -1128,14 +1102,10 @@ export default function CensusPage() {
                   onChange={(e) => setBankAckFor(e.target.checked ? bankChangesSignature : null)}
                   className="mt-0.5 shrink-0"
                 />
-                <span className="text-xs font-semibold text-amber-900">
-                  J'ai lu cet avertissement et je prépare la demande adressée au Directeur Général.
-                </span>
+                <span className="text-xs font-semibold text-amber-900">{tr.census.bankWarning.ack}</span>
               </label>
               {!bankChangeAck && (
-                <p className="text-[11px] font-semibold text-red-700 mt-1">
-                  Cette case est obligatoire pour pouvoir soumettre.
-                </p>
+                <p className="text-[11px] font-semibold text-red-700 mt-1">{tr.census.bankWarning.ackRequired}</p>
               )}
             </div>
           )}
@@ -1143,7 +1113,7 @@ export default function CensusPage() {
       </Section>
 
       <Section
-        title="Affectation Organisationnelle"
+        title={tr.census.sections.organization}
         showIf={stage === 'org'}
         flagged={
           flaggedFields.has('declared_branch_type') ||
@@ -1159,11 +1129,7 @@ export default function CensusPage() {
           flaggedFields.has('declared_administrative_status')
         }
       >
-        <p className="text-xs text-gray-500 mb-3">
-          Chaque niveau facultatif (direction, département/sous-direction, unité) ne fait que restreindre la liste
-          suivante. Vérifiez bien l'ordre : Direction → Département ou Sous-direction → Service → Unité / Secteur.
-          Les RH vérifient ces informations avant la validation finale.
-        </p>
+        <p className="text-xs text-gray-500 mb-3">{tr.census.notes.orgIntro}</p>
 
         <div className="flex gap-2 mb-4">
           {(['medical', 'administrative'] as const).map((b) => (
@@ -1176,7 +1142,7 @@ export default function CensusPage() {
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
             >
-              {b === 'medical' ? '🏥 Branche Médicale' : '📋 Branche Administrative'}
+              {b === 'medical' ? tr.census.branchButtons.medical : tr.census.branchButtons.administrative}
             </button>
           ))}
         </div>
@@ -1190,36 +1156,36 @@ export default function CensusPage() {
         {cascade && orgOptions && (
           <div className="space-y-3">
             <SelectField
-              label="Direction"
+              label={tr.census.fields.direction}
               value={draft.organizational.direction_id}
               onChange={setDirection}
               options={toOptions(cascade.directions)}
-              hint="Facultatif : restreint les listes suivantes"
+              hint={tr.census.hints.direction}
               flagged={flaggedFields.has('declared_direction_id')}
             />
 
             {draft.organizational.branch_type === 'medical' ? (
               <SelectField
-                label="Département"
+                label={tr.census.fields.department}
                 value={draft.organizational.department_id}
                 onChange={setDepartment}
                 options={toOptions(cascade.departments)}
-                hint="Facultatif : restreint la liste des services"
+                hint={tr.census.hints.narrowsServices}
                 flagged={flaggedFields.has('declared_department_id')}
               />
             ) : (
               <SelectField
-                label="Sous-direction"
+                label={tr.census.fields.subDirection}
                 value={draft.organizational.sub_direction_id}
                 onChange={setSubDirection}
                 options={toOptions(cascade.subDirections)}
-                hint="Facultatif : restreint la liste des services"
+                hint={tr.census.hints.narrowsServices}
                 flagged={flaggedFields.has('declared_sub_direction_id')}
               />
             )}
 
             <SelectField
-              label="Service"
+              label={tr.census.fields.service}
               value={draft.organizational.service_id}
               onChange={setService}
               options={toOptions(cascade.services)}
@@ -1227,56 +1193,56 @@ export default function CensusPage() {
             />
 
             <SelectField
-              label="Unité / Secteur"
+              label={tr.census.fields.sectorUnit}
               value={draft.organizational.sector_id}
               onChange={(v) => patchOrganizational({ sector_id: v })}
               options={toOptions(cascade.sectors)}
               disabled={!draft.organizational.service_id}
               flagged={flaggedFields.has('declared_sector_id')}
               hint={!draft.organizational.service_id
-                ? "Choisissez d'abord un service"
+                ? tr.census.hints.chooseServiceFirst
                 : cascade.sectors.length === 0
-                  ? 'Aucune unité / secteur rattachée à ce service'
-                  : 'Facultatif : unité ou secteur rattaché au service'}
+                  ? tr.census.hints.noSector
+                  : tr.census.hints.sectorOptional}
             />
 
             <div className="border-t border-gray-100 pt-3 space-y-3">
               <SelectField
-                label="Corps de métier"
+                label={tr.census.fields.tradeBody}
                 value={draft.organizational.trade_body_id}
                 onChange={setTradeBody}
                 options={toOptions(orgOptions.trade_bodies)}
                 flagged={flaggedFields.has('declared_trade_body_id')}
               />
               <SelectField
-                label="Qualification"
+                label={tr.census.fields.qualification}
                 value={draft.organizational.qualification_id}
                 onChange={(v) => patchOrganizational({ qualification_id: v })}
                 options={toOptions(cascade.qualifications)}
                 disabled={!draft.organizational.trade_body_id && !draft.organizational.qualification_id}
-                hint="Choisissez d'abord le corps de métier"
+                hint={tr.census.hints.chooseTradeBodyFirst}
                 flagged={flaggedFields.has('declared_qualification_id')}
               />
               <SelectField
-                label="Poste hiérarchique"
+                label={tr.census.fields.jobTitle}
                 value={draft.organizational.job_title_id}
                 onChange={(v) => patchOrganizational({ job_title_id: v })}
                 options={orgOptions.job_titles.map((j) => ({
                   value: String(j.id),
-                  label: j.hierarchy_level != null ? `${j.name} (Niveau ${j.hierarchy_level})` : j.name,
+                  label: j.hierarchy_level != null ? `${j.name} (${tr.census.labels.level(j.hierarchy_level)})` : j.name,
                 }))}
                 flagged={flaggedFields.has('declared_job_title_id')}
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <SelectField
-                  label="Type de personnel"
+                  label={tr.census.fields.personnelType}
                   value={draft.organizational.personnel_type}
                   onChange={(v) => patchOrganizational({ personnel_type: v })}
                   options={orgOptions.personnel_types}
                   flagged={flaggedFields.has('declared_personnel_type')}
                 />
                 <SelectField
-                  label="Statut administratif"
+                  label={tr.census.fields.administrativeStatus}
                   value={draft.organizational.administrative_status}
                   onChange={(v) => patchOrganizational({ administrative_status: v })}
                   options={orgOptions.administrative_statuses}
@@ -1289,17 +1255,17 @@ export default function CensusPage() {
       </Section>
 
       <Section
-        title="Ayants Droit"
+        title={tr.census.sections.dependents}
         showIf={stage === 'family'}
         flagged={flaggedFields.has('dependents')}
         action={
           <button onClick={() => setEditingDependentIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
-            + Ajouter
+            {tr.diplomas.add}
           </button>
         }
       >
         {draft.dependents.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">Aucun ayant droit déclaré.</p>
+          <p className="text-sm text-gray-400 italic">{tr.census.modals.emptyDependents}</p>
         ) : (
           <div className="space-y-2">
             {draft.dependents.map((dep, index) => (
@@ -1309,20 +1275,20 @@ export default function CensusPage() {
                     {dep.last_name} {dep.first_name}
                   </p>
                   <p className="text-xs text-gray-500">
-                    {RELATIONSHIP_LABELS[dep.relationship]} {dep.existing_id ? '' : '· nouveau'}
+                    {relationshipLabels[dep.relationship]} {dep.existing_id ? '' : tr.census.labels.newSuffix}
                   </p>
                 </div>
                 <div className="flex gap-3">
                   {!dep.removed && (
                     <button onClick={() => setEditingDependentIndex(index)} className="text-xs font-semibold text-[#1e3a5f] hover:underline">
-                      Modifier
+                      {tr.census.labels.edit}
                     </button>
                   )}
                   <button
                     onClick={() => toggleRemoveDependent(index)}
                     className={`text-xs font-semibold hover:underline ${dep.removed ? 'text-green-600' : 'text-red-600'}`}
                   >
-                    {dep.removed ? 'Rétablir' : 'Retirer'}
+                    {dep.removed ? tr.census.labels.restore : tr.common.remove}
                   </button>
                 </div>
               </div>
@@ -1332,17 +1298,17 @@ export default function CensusPage() {
       </Section>
 
       <Section
-        title="Diplômes & Formations"
+        title={tr.census.sections.diplomas}
         showIf={stage === 'family'}
         flagged={flaggedFields.has('diplomas')}
         action={
           <button onClick={() => setEditingDiplomaIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
-            + Ajouter
+            {tr.diplomas.add}
           </button>
         }
       >
         {draft.diplomas.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">Aucun diplôme/formation déclaré.</p>
+          <p className="text-sm text-gray-400 italic">{tr.census.modals.emptyDiplomas}</p>
         ) : (
           <div className="space-y-2">
             {draft.diplomas.map((dip, index) => (
@@ -1350,20 +1316,20 @@ export default function CensusPage() {
                 <div>
                   <p className={`text-sm font-semibold ${dip.removed ? 'line-through' : ''} text-gray-900`}>{dip.title}</p>
                   <p className="text-xs text-gray-500">
-                    {DIPLOMA_TYPE_LABELS[dip.type]} · {dip.institution} ({dip.year_obtained}) {dip.existing_id ? '' : '· nouveau'}
+                    {diplomaTypeLabels[dip.type]} · {dip.institution} ({dip.year_obtained}) {dip.existing_id ? '' : tr.census.labels.newSuffix}
                   </p>
                 </div>
                 <div className="flex gap-3">
                   {!dip.removed && (
                     <button onClick={() => setEditingDiplomaIndex(index)} className="text-xs font-semibold text-[#1e3a5f] hover:underline">
-                      Modifier
+                      {tr.census.labels.edit}
                     </button>
                   )}
                   <button
                     onClick={() => toggleRemoveDiploma(index)}
                     className={`text-xs font-semibold hover:underline ${dip.removed ? 'text-green-600' : 'text-red-600'}`}
                   >
-                    {dip.removed ? 'Rétablir' : 'Retirer'}
+                    {dip.removed ? tr.census.labels.restore : tr.common.remove}
                   </button>
                 </div>
               </div>
@@ -1378,19 +1344,16 @@ export default function CensusPage() {
           disabled={!prevStage}
           className="flex-1 border border-gray-300 rounded-lg py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
         >
-          ← Précédent
+          {tr.census.labels.previous}
         </button>
         <button
           onClick={() => goTo(nextStage ? nextStage.key : 'review')}
           className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
         >
-          {nextStage ? `${nextStage.label} →` : 'Vérifier et Soumettre'}
+          {nextStage ? `${nextStage.label} →` : tr.census.labels.reviewCta}
         </button>
       </div>
-      <p className="text-xs text-gray-400 text-center mt-3">
-        ✏️ Tes saisies sont enregistrées sur cet appareil à chaque modification : tu peux fermer la page ou perdre
-        la connexion, rien n'est perdu.
-      </p>
+      <p className="text-xs text-gray-400 text-center mt-3">{tr.census.labels.draftNoteForm}</p>
 
       {editingDependentIndex !== null && (
         <DependentModal
@@ -1425,6 +1388,8 @@ function Section({
   flagged?: boolean;
   children: React.ReactNode;
 }) {
+  const { tr } = useLang();
+
   if (!showIf) return null;
 
   return (
@@ -1436,7 +1401,7 @@ function Section({
           {title}
           {flagged && (
             <span className="text-[10px] font-bold text-red-700 bg-white border border-red-200 rounded-full px-2 py-0.5">
-              à corriger
+              {tr.census.labels.flaggedBadge}
             </span>
           )}
         </h2>
@@ -1461,7 +1426,11 @@ function StageNav({
   onPick: (s: Stage) => void;
   flaggedStages: Set<DraftStage>;
 }) {
-  const stages: { key: Stage; label: string }[] = [...FORM_STAGES, { key: 'review', label: 'Récapitulatif' }];
+  const { tr } = useLang();
+  const stages: { key: Stage; label: string }[] = [
+    ...FORM_STAGE_KEYS.map((key) => ({ key, label: tr.census.stages[key] })),
+    { key: 'review', label: tr.census.stages.review },
+  ];
   const currentIndex = stages.findIndex((s) => s.key === stage);
 
   return (
@@ -1495,10 +1464,11 @@ function StageNav({
 }
 
 function RecapRow({ label, value }: { label: string; value: string }) {
+  const { tr } = useLang();
   return (
     <div className="flex justify-between py-1.5 border-b border-gray-100 last:border-0">
       <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-gray-900">{value || '—'}</span>
+      <span className="text-sm font-medium text-gray-900">{value || tr.census.labels.dash}</span>
     </div>
   );
 }
@@ -1510,7 +1480,8 @@ const FLAGGED_CLASS =
 
 /** Rappel du motif du renvoi, posé sous chaque champ que les RH ont marqué. */
 function CorrectionNote() {
-  return <p className="text-[11px] font-semibold text-red-600 mt-1">↩️ À corriger — demandé par les RH</p>;
+  const { tr } = useLang();
+  return <p className="text-[11px] font-semibold text-red-600 mt-1">{tr.date.flagged}</p>;
 }
 
 function Field({
@@ -1563,6 +1534,7 @@ function SelectField({
   hint?: string;
   flagged?: boolean;
 }) {
+  const { tr } = useLang();
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
@@ -1576,7 +1548,7 @@ function SelectField({
             : `${FIELD_CLASS} bg-white disabled:bg-gray-100 disabled:text-gray-400`
         }
       >
-        <option value="">{disabled && hint ? hint : '—'}</option>
+        <option value="">{disabled && hint ? hint : tr.census.labels.dash}</option>
         {options.map((o) => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
@@ -1613,47 +1585,48 @@ function DependentModal({
   onCancel: () => void;
   onSave: (item: CensusDraftDependent) => void;
 }) {
+  const { tr } = useLang();
   const [item, setItem] = useState<CensusDraftDependent>(initial);
   const isParent = PARENT_RELATIONS.includes(item.relationship);
   // Un parent n'a pas besoin de sa propre pièce si l'acte familial est déjà là.
   const actCovered = isParent && familyActAvailable && !isAttached(item.documents.birth_certificate);
-  const actTitle = isParent ? "Acte de naissance de l'employé" : "Acte de naissance de l'ayant droit";
-  let actSuffix = '*';
+  const actTitle = isParent ? tr.census.modals.actEmployee : tr.census.modals.actDependent;
+  let actSuffix = tr.census.modals.suffixRequired;
   if (item.existing_id) {
-    actSuffix = '(joindre si changement)';
+    actSuffix = tr.census.modals.suffixIfChanged;
   } else if (actCovered) {
-    actSuffix = '(facultatif — déjà fourni)';
+    actSuffix = tr.census.modals.suffixAlreadyProvided;
   }
 
   function handleSave() {
     if (!item.last_name.trim() || !item.birth_date.trim()) {
-      alert('Le nom et la date de naissance sont obligatoires.');
+      alert(tr.dependents.errors.nameAndBirthDate);
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(item.birth_date.trim())) {
-      alert('Date de naissance invalide. Format attendu : JJ-MM-AAAA.');
+      alert(tr.dependents.errors.invalidBirthDate);
       return;
     }
     if (!item.existing_id && !isAttached(item.documents.birth_certificate) && !(isParent && familyActAvailable)) {
       alert(
         isParent
-          ? "Pour déclarer un parent, joins TON acte de naissance : c'est lui qui prouve la filiation."
-          : `Pour ${dependentWho(item)}, l'acte de naissance est obligatoire. Vérifie que le fichier n'est pas vide (0 octet) : reprends la photo au besoin.`,
+          ? tr.census.alerts.actParentInModal
+          : tr.census.alerts.actRequiredFor(dependentWho(item, tr)),
       );
       return;
     }
     if (item.relationship === 'spouse' && !item.existing_id && !isAttached(item.documents.marriage_certificate)) {
-      alert("L'acte de mariage est obligatoire pour un(e) conjoint(e).");
+      alert(tr.dependents.errors.marriageCertificateRequired);
       return;
     }
     onSave(item);
   }
 
   return (
-    <Modal title="Ayant Droit">
+    <Modal title={tr.census.modals.dependentTitle}>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Lien de parenté</label>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.dependents.relationshipField}</label>
           <div className="flex flex-wrap gap-2">
             {(['spouse', 'child', 'father', 'mother'] as const).map((r) => (
               <button
@@ -1661,27 +1634,27 @@ function DependentModal({
                 onClick={() => setItem((p) => ({ ...p, relationship: r }))}
                 className={`px-2.5 py-1 rounded-full text-xs border ${item.relationship === r ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
               >
-                {RELATIONSHIP_LABELS[r]}
+                {tr.dependents.relationships[r]}
               </button>
             ))}
           </div>
         </div>
-        <Field label="Nom *" value={item.last_name} onChange={(v) => setItem((p) => ({ ...p, last_name: v }))} />
-        <Field label="Prénom(s)" value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} />
-        <DateInput label="Date de naissance *" value={item.birth_date} onChange={(v) => setItem((p) => ({ ...p, birth_date: v }))} />
+        <Field label={tr.dependents.lastName} value={item.last_name} onChange={(v) => setItem((p) => ({ ...p, last_name: v }))} />
+        <Field label={tr.dependents.firstName} value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} />
+        <DateInput label={tr.dependents.birthDate} value={item.birth_date} onChange={(v) => setItem((p) => ({ ...p, birth_date: v }))} />
         <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Sexe</label>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.dependents.genderField}</label>
           <div className="flex gap-2">
-            <button onClick={() => setItem((p) => ({ ...p, gender: 'M' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'M' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>Masculin</button>
-            <button onClick={() => setItem((p) => ({ ...p, gender: 'F' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'F' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>Féminin</button>
+            <button onClick={() => setItem((p) => ({ ...p, gender: 'M' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'M' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>{tr.dependents.male}</button>
+            <button onClick={() => setItem((p) => ({ ...p, gender: 'F' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'F' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>{tr.dependents.female}</button>
           </div>
         </div>
 
         <PhotoCaptureInput
-          label="Photo"
+          label={tr.dependents.photo}
           file={item.documents.photo ?? null}
           onChange={(f) => setItem((p) => ({ ...p, documents: { ...p.documents, photo: f } }))}
-          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES)}
+          hint={uploadHint(PHOTO_EXTENSIONS, MAX_UPLOAD_BYTES, tr.uploads)}
           maxBytes={MAX_UPLOAD_BYTES}
         />
 
@@ -1692,22 +1665,20 @@ function DependentModal({
         />
         {isParent && (
           <p className="text-xs text-gray-500 -mt-1">
-            {actCovered
-              ? '✅ La pièce qui prouve la filiation est déjà au dossier pour un autre parent : elle servira pour cette déclaration, inutile de la renvoyer.'
-              : "C'est TON acte de naissance qui prouve la filiation avec ce parent — la même pièce sert pour le père et la mère."}
+            {actCovered ? tr.census.modals.actCoveredNote : tr.census.modals.actEmployeeNote}
           </p>
         )}
         {item.relationship === 'spouse' && (
           <FileField
-            label={`Acte de mariage ${item.existing_id ? '(joindre si changement)' : '*'}`}
+            label={`${tr.census.modals.marriageCertificate} ${item.existing_id ? tr.census.modals.suffixIfChanged : tr.census.modals.suffixRequired}`}
             file={item.documents.marriage_certificate ?? null}
             onChange={(f) => setItem((p) => ({ ...p, documents: { ...p.documents, marriage_certificate: f } }))}
           />
         )}
 
         <div className="flex gap-3 pt-2">
-          <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">Annuler</button>
-          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">Enregistrer</button>
+          <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">{tr.census.labels.cancel}</button>
+          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
         </div>
       </div>
     </Modal>
@@ -1723,30 +1694,31 @@ function DiplomaModal({
   onCancel: () => void;
   onSave: (item: CensusDraftDiploma) => void;
 }) {
+  const { tr } = useLang();
   const [item, setItem] = useState<CensusDraftDiploma>(initial);
 
   function handleSave() {
     const year = parseInt(item.year_obtained.trim(), 10);
     if (!item.title.trim() || !item.institution.trim()) {
-      alert("L'intitulé et l'établissement sont obligatoires.");
+      alert(tr.diplomas.errors.titleAndInstitution);
       return;
     }
     if (!year || year < 1950 || year > new Date().getFullYear()) {
-      alert('Année invalide.');
+      alert(tr.census.alerts.invalidYear);
       return;
     }
     if (!item.existing_id && !item.document) {
-      alert('Un document justificatif est obligatoire pour un nouveau diplôme.');
+      alert(tr.census.alerts.diplomaDocRequired);
       return;
     }
     onSave(item);
   }
 
   return (
-    <Modal title="Diplôme / Formation">
+    <Modal title={tr.census.modals.diplomaTitle}>
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-semibold text-gray-500 mb-1">Type</label>
+          <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.diplomas.typeField}</label>
           <div className="flex flex-col gap-2">
             {(['recruitment_diploma', 'highest_diploma', 'training'] as const).map((t) => (
               <button
@@ -1754,24 +1726,24 @@ function DiplomaModal({
                 onClick={() => setItem((p) => ({ ...p, type: t }))}
                 className={`px-3 py-1.5 rounded-lg text-sm text-left border ${item.type === t ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
               >
-                {DIPLOMA_TYPE_LABELS[t]}
+                {tr.diplomas.types[t]}
               </button>
             ))}
           </div>
         </div>
-        <Field label="Intitulé *" value={item.title} onChange={(v) => setItem((p) => ({ ...p, title: v }))} />
-        <Field label="Établissement *" value={item.institution} onChange={(v) => setItem((p) => ({ ...p, institution: v }))} />
-        <Field label="Année *" value={item.year_obtained} onChange={(v) => setItem((p) => ({ ...p, year_obtained: v }))} type="number" />
+        <Field label={tr.diplomas.titleField} value={item.title} onChange={(v) => setItem((p) => ({ ...p, title: v }))} />
+        <Field label={tr.census.fields.institution} value={item.institution} onChange={(v) => setItem((p) => ({ ...p, institution: v }))} />
+        <Field label={tr.census.fields.year} value={item.year_obtained} onChange={(v) => setItem((p) => ({ ...p, year_obtained: v }))} type="number" />
 
         <FileField
-          label={`Document justificatif ${item.existing_id ? '(joindre si changement)' : '*'}`}
+          label={`${tr.census.fields.documentField} ${item.existing_id ? tr.census.modals.suffixIfChanged : tr.census.modals.suffixRequired}`}
           file={item.document ?? null}
           onChange={(f) => setItem((p) => ({ ...p, document: f }))}
         />
 
         <div className="flex gap-3 pt-2">
-          <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">Annuler</button>
-          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">Enregistrer</button>
+          <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">{tr.census.labels.cancel}</button>
+          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
         </div>
       </div>
     </Modal>
@@ -1797,10 +1769,11 @@ function FileField({
   onChange: (f: File | null) => void;
   flagged?: boolean;
 }) {
+  const { tr } = useLang();
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
-      <p className="text-xs text-gray-400 mb-1">{uploadHint(DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES)}</p>
+      <p className="text-xs text-gray-400 mb-1">{uploadHint(DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES, tr.uploads)}</p>
       <input
         type="file"
         accept="application/pdf,image/*"
@@ -1810,17 +1783,14 @@ function FileField({
           // Un fichier de 0 octet est traité comme si rien n'avait été joint : le
           // serveur l'ignore et le formulaire aurait affiché une pièce « fournie ».
           if (picked && picked.size === 0) {
-            alert(
-              `« ${picked.name} » est vide : l'appareil photo ou l'application ne l'a pas enregistré. ` +
-                'Reprends la photo, ou choisis un autre fichier.'
-            );
+            alert(tr.census.file.emptyFile(picked.name));
             e.target.value = '';
             return;
           }
 
           // Refusé ici plutôt qu'à l'envoi : l'employé ne doit pas remplir les cinq
           // étapes pour apprendre au dernier moment que sa pièce ne passerait pas.
-          const refusal = picked && uploadRefusal(picked, DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES);
+          const refusal = picked && uploadRefusal(picked, DOCUMENT_EXTENSIONS, MAX_UPLOAD_BYTES, tr.uploads);
 
           if (refusal) {
             alert(refusal);
@@ -1832,12 +1802,10 @@ function FileField({
         }}
         className={`w-full text-xs ${flagged ? 'rounded-lg border-2 border-red-500 bg-white p-2' : ''}`}
       />
-      {file && file.size === 0 && (
-        <p className="text-xs text-red-700 mt-1">⚠️ {file.name} est vide : sélectionne-le à nouveau.</p>
-      )}
+      {file && file.size === 0 && <p className="text-xs text-red-700 mt-1">{tr.census.file.emptyPick(file.name)}</p>}
       {file && file.size > 0 && (
         <p className="text-xs text-green-700 mt-1">
-          ✅ {file.name} · {fileSizeLabel(file.size)}
+          {tr.census.file.attached(file.name, fileSizeLabel(file.size, tr.uploads.units))}
         </p>
       )}
       {flagged && <CorrectionNote />}

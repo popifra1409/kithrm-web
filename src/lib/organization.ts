@@ -21,17 +21,21 @@ type Named = { id: number; name: string };
  * (donnée ancienne, élément désactivé) plutôt que de le faire disparaître sans
  * explication.
  */
-function withSelected<T extends Named>(filtered: T[], all: T[], selected: string): T[] {
+function withSelected<T extends Named>(filtered: T[], all: T[], selected: string, label: (name: string) => string): T[] {
     if (!selected) return filtered;
 
     const id = Number(selected);
     if (filtered.some((x) => x.id === id)) return filtered;
 
     const found = all.find((x) => x.id === id);
-    return found ? [{ ...found, name: `${found.name} (hors hiérarchie)` }, ...filtered] : filtered;
+    return found ? [{ ...found, name: label(found.name) }, ...filtered] : filtered;
 }
 
-export function computeCascade(options: OrganizationOptions, org: CensusDraft['organizational']) {
+export function computeCascade(
+    options: OrganizationOptions,
+    org: CensusDraft['organizational'],
+    outOfHierarchy: (name: string) => string
+) {
     const toId = (v: string) => (v ? Number(v) : null);
     const directionId = toId(org.direction_id);
     const departmentId = toId(org.department_id);
@@ -75,11 +79,11 @@ export function computeCascade(options: OrganizationOptions, org: CensusDraft['o
         tradeBodyId === null ? [] : options.qualifications.filter((q) => q.trade_body_id === tradeBodyId);
 
     return {
-        directions: withSelected(directions, options.directions, org.direction_id),
-        departments: withSelected(departments, options.departments, org.department_id),
-        subDirections: withSelected(subDirections, options.sub_directions, org.sub_direction_id),
-        services: withSelected(services, options.services, org.service_id),
-        sectors: withSelected(sectors, options.sectors, org.sector_id),
-        qualifications: withSelected(qualifications, options.qualifications, org.qualification_id),
+        directions: withSelected(directions, options.directions, org.direction_id, outOfHierarchy),
+        departments: withSelected(departments, options.departments, org.department_id, outOfHierarchy),
+        subDirections: withSelected(subDirections, options.sub_directions, org.sub_direction_id, outOfHierarchy),
+        services: withSelected(services, options.services, org.service_id, outOfHierarchy),
+        sectors: withSelected(sectors, options.sectors, org.sector_id, outOfHierarchy),
+        qualifications: withSelected(qualifications, options.qualifications, org.qualification_id, outOfHierarchy),
     };
 }

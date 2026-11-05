@@ -3,15 +3,30 @@ import axios from 'axios';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppInfo } from '../context/AppInfoContext';
+import { useLang } from '../context/LangContext';
 import { startActivation, refreshActivationCaptcha, requestActivationReview } from '../api/auth';
 import type { ActivationCaptcha } from '../api/auth';
 import { extractApiError } from '../api/client';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import DateInput from '../components/DateInput';
 
 type Step = 'credentials' | 'verification' | 'review_requested';
 
 /** L'employé qui ne connaît que son année d'entrée saisit une année, pas une date. */
 type DateMode = 'full' | 'year';
+
+/** Refus produits ici : stockés par clé pour qu'un changement de langue les traduise aussitôt. */
+type ClientIssue =
+  | 'all_fields'
+  | 'password_mismatch'
+  | 'password_short'
+  | 'year_required'
+  | 'date_required'
+  | 'calculation_required'
+  | 'session_expired'
+  | 'verification_incorrect'
+  | 'review_calculation_first'
+  | 'calculation_incorrect';
 
 interface VerificationSession {
   token: string;
@@ -34,6 +49,7 @@ function yearOptions(): number[] {
 export default function ActivatePage() {
   const { completeActivation } = useAuth();
   const { appInfo } = useAppInfo();
+  const { tr } = useLang();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>('credentials');
@@ -57,8 +73,11 @@ export default function ActivatePage() {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<ClientIssue | string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+
+  // Une clé connue est traduite, un message du serveur est affiché tel quel.
+  const errorCopy = (message: ClientIssue | string) => tr.activate.errors[message as ClientIssue] ?? message;
 
   /** Date réellement envoyée : en mode année, le jour et le mois n'ont pas d'effet. */
   function declaredDate(): string {
@@ -74,7 +93,7 @@ export default function ActivatePage() {
     setRemainingAttempts(null);
   }
 
-  function backToCredentials(message: string | null) {
+  function backToCredentials(message: ClientIssue | string | null) {
     setSession(null);
     setStep('credentials');
     resetVerificationFields();
@@ -87,17 +106,17 @@ export default function ActivatePage() {
     setFieldErrors({});
 
     if (!matricule.trim() || !temporaryPassword || !password || !passwordConfirmation) {
-      setErrorMessage('Veuillez remplir tous les champs.');
+      setErrorMessage('all_fields');
       return;
     }
 
     if (password !== passwordConfirmation) {
-      setErrorMessage('Les deux mots de passe ne correspondent pas.');
+      setErrorMessage('password_mismatch');
       return;
     }
 
     if (password.length < 8) {
-      setErrorMessage('Le mot de passe doit contenir au moins 8 caractères.');
+      setErrorMessage('password_short');
       return;
     }
 
@@ -115,7 +134,7 @@ export default function ActivatePage() {
       resetVerificationFields();
       setStep('verification');
     } catch (error) {
-      const apiError = extractApiError(error);
+      const apiError = extractApiError(error, tr.api);
       setErrorMessage(apiError.message);
       if (apiError.errors) setFieldErrors(apiError.errors);
     } finally {
@@ -130,16 +149,12 @@ export default function ActivatePage() {
     setErrorMessage(null);
 
     if (dateMode === 'year' ? !declaredYear : !recruitmentDate) {
-      setErrorMessage(
-        dateMode === 'year'
-          ? 'Veuillez indiquer votre année de recrutement.'
-          : 'Veuillez indiquer votre date de recrutement.'
-      );
+      setErrorMessage(dateMode === 'year' ? 'year_required' : 'date_required');
       return;
     }
 
     if (captchaAnswer.trim() === '' || Number.isNaN(Number(captchaAnswer))) {
-      setErrorMessage('Veuillez saisir le résultat du calcul.');
+      setErrorMessage('calculation_required');
       return;
     }
 
@@ -160,7 +175,7 @@ export default function ActivatePage() {
 
         // Session expirée ou compte bloqué : il faut reprendre depuis le début.
         if (status === 410 || status === 429) {
-          backToCredentials(body?.message ?? "La session d'activation a expiré. Veuillez recommencer.");
+          backToCredentials(body?.message ?? 'session_expired');
           return;
         }
 
@@ -170,12 +185,12 @@ export default function ActivatePage() {
           setSession((current) => (current ? { ...current, captcha: nextCaptcha } : current));
           setCaptchaAnswer('');
           setRemainingAttempts(body.remaining_attempts ?? null);
-          setErrorMessage(body.message ?? 'Vérification incorrecte.');
+          setErrorMessage(body.message ?? 'verification_incorrect');
           return;
         }
       }
 
-      setErrorMessage(extractApiError(error).message);
+      setErrorMessage(extractApiError(error, tr.api).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -192,7 +207,7 @@ export default function ActivatePage() {
     setErrorMessage(null);
 
     if (captchaAnswer.trim() === '' || Number.isNaN(Number(captchaAnswer))) {
-      setErrorMessage('Résolvez d\'abord le petit calcul, puis envoyez votre demande aux RH.');
+      setErrorMessage('review_calculation_first');
       return;
     }
 
@@ -222,12 +237,12 @@ export default function ActivatePage() {
         if (status === 422 && body?.captcha) {
           setSession((current) => (current ? { ...current, captcha: body.captcha as ActivationCaptcha } : current));
           setCaptchaAnswer('');
-          setErrorMessage(body.message ?? 'Le résultat du calcul est incorrect.');
+          setErrorMessage(body.message ?? 'calculation_incorrect');
           return;
         }
       }
 
-      setErrorMessage(extractApiError(error).message);
+      setErrorMessage(extractApiError(error, tr.api).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -246,11 +261,10 @@ export default function ActivatePage() {
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 410) {
         backToCredentials(
-          (error.response.data as VerificationErrorBody | undefined)?.message ??
-          "La session d'activation a expiré. Veuillez recommencer."
+          (error.response.data as VerificationErrorBody | undefined)?.message ?? 'session_expired'
         );
       } else {
-        setErrorMessage(extractApiError(error).message);
+        setErrorMessage(extractApiError(error, tr.api).message);
       }
     } finally {
       setIsRefreshing(false);
@@ -260,6 +274,10 @@ export default function ActivatePage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <div className="flex justify-end mb-2">
+          <LanguageSwitcher />
+        </div>
+
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
             <img src={appInfo.logo_url} alt="" className="w-14 h-14 mx-auto mb-3 object-contain" />
@@ -271,33 +289,28 @@ export default function ActivatePage() {
 
           {step === 'credentials' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">Activer mon compte</h1>
-              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                Utilisez le matricule et le mot de passe temporaire communiqués par les Ressources
-                Humaines, puis choisissez votre mot de passe définitif.
+              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.title}</h1>
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.intro}</p>
+              <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">
+                {tr.activate.stepOf(1, 2)}
               </p>
-              <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">Étape 1 sur 2</p>
             </>
           )}
 
           {step === 'verification' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">Vérification de sécurité</h1>
-              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                Dernière étape : confirmez votre année d&apos;entrée et résolvez le petit calcul pour
-                finaliser l&apos;activation de votre compte.
+              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.verificationTitle}</h1>
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.verificationIntro}</p>
+              <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">
+                {tr.activate.stepOf(2, 2)}
               </p>
-              <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">Étape 2 sur 2</p>
             </>
           )}
 
           {step === 'review_requested' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">Demande transmise aux RH</h1>
-              <p className="text-xs text-gray-500 mt-2 leading-relaxed">
-                Votre compte n&apos;est pas encore ouvert. Un agent des Ressources Humaines doit
-                vérifier votre identité.
-              </p>
+              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.reviewTitle}</h1>
+              <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.reviewIntro}</p>
             </>
           )}
         </div>
@@ -305,45 +318,45 @@ export default function ActivatePage() {
         {step === 'credentials' && (
           <form onSubmit={handleStart} className="space-y-4">
             <Field
-              label="Matricule"
+              label={tr.common.matriculeLabel}
               value={matricule}
               onChange={setMatricule}
               onBlur={() => setMatricule((v) => v.trim())}
-              placeholder="Ex: 98240812A"
+              placeholder={tr.common.matriculePlaceholder}
               error={fieldErrors.matricule?.[0]}
             />
             <Field
-              label="Mot de passe temporaire"
+              label={tr.activate.temporaryPassword}
               type="password"
               value={temporaryPassword}
               onChange={setTemporaryPassword}
-              placeholder="Donné par les RH"
+              placeholder={tr.activate.temporaryPasswordPlaceholder}
               error={fieldErrors.temporary_password?.[0]}
             />
             <Field
-              label="Nouveau mot de passe"
+              label={tr.activate.newPassword}
               type="password"
               value={password}
               onChange={setPassword}
-              placeholder="8 caractères minimum"
+              placeholder={tr.activate.newPasswordPlaceholder}
               error={fieldErrors.password?.[0]}
             />
             <Field
-              label="Confirmer le mot de passe"
+              label={tr.activate.confirmPassword}
               type="password"
               value={passwordConfirmation}
               onChange={setPasswordConfirmation}
               placeholder="••••••••"
             />
 
-            {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+            {errorMessage && <p className="text-sm text-red-600 text-center">{errorCopy(errorMessage)}</p>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
-              {isSubmitting ? 'Vérification...' : 'Continuer'}
+              {isSubmitting ? tr.activate.checking : tr.activate.continue}
             </button>
           </form>
         )}
@@ -352,16 +365,16 @@ export default function ActivatePage() {
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <ModeButton active={dateMode === 'full'} onClick={() => setDateMode('full')}>
-                Date exacte
+                {tr.activate.modeExactDate}
               </ModeButton>
               <ModeButton active={dateMode === 'year'} onClick={() => setDateMode('year')}>
-                Année seulement
+                {tr.activate.modeYearOnly}
               </ModeButton>
             </div>
 
             {dateMode === 'full' ? (
               <DateInput
-                label="Date de recrutement"
+                label={tr.activate.recruitmentDate}
                 value={recruitmentDate}
                 onChange={setRecruitmentDate}
                 labelClassName="block text-sm font-medium text-gray-700 mb-1"
@@ -370,7 +383,7 @@ export default function ActivatePage() {
             ) : (
               <div>
                 <label htmlFor="declared-year" className="block text-sm font-medium text-gray-700 mb-1">
-                  Année de recrutement
+                  {tr.activate.recruitmentYear}
                 </label>
                 <select
                   id="declared-year"
@@ -378,19 +391,19 @@ export default function ActivatePage() {
                   onChange={(e) => setDeclaredYear(e.target.value)}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
                 >
-                  <option value="">Choisissez une année</option>
+                  <option value="">{tr.activate.chooseYear}</option>
                   {yearOptions().map((year) => (
                     <option key={year} value={String(year)}>
                       {year}
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">L&apos;année suffit : le jour et le mois ne sont pas vérifiés.</p>
+                <p className="text-xs text-gray-500 mt-1">{tr.activate.yearIsEnough}</p>
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vérification anti-robot</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{tr.common.captchaLabel}</label>
               <div className="flex items-center gap-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 mb-2">
                 <span className="flex-1 text-center text-lg font-bold text-[#1e3a5f] tracking-wide select-none">
                   {session.captcha.question}
@@ -400,9 +413,9 @@ export default function ActivatePage() {
                   onClick={handleRefreshCaptcha}
                   disabled={isRefreshing || isSubmitting}
                   className="text-xs font-semibold text-[#1e3a5f] hover:underline disabled:opacity-50"
-                  title="Obtenir un autre calcul"
+                  title={tr.common.captchaRefreshTitle}
                 >
-                  {isRefreshing ? '…' : '↻ Changer'}
+                  {isRefreshing ? '…' : tr.common.captchaRefresh}
                 </button>
               </div>
               <input
@@ -410,17 +423,15 @@ export default function ActivatePage() {
                 inputMode="numeric"
                 value={captchaAnswer}
                 onChange={(e) => setCaptchaAnswer(e.target.value)}
-                placeholder="Votre réponse"
+                placeholder={tr.common.answerPlaceholder}
                 autoComplete="off"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
               />
             </div>
 
-            {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+            {errorMessage && <p className="text-sm text-red-600 text-center">{errorCopy(errorMessage)}</p>}
             {remainingAttempts !== null && (
-              <p className="text-xs text-amber-700 text-center">
-                Il vous reste {remainingAttempts} tentative{remainingAttempts > 1 ? 's' : ''} avant blocage temporaire.
-              </p>
+              <p className="text-xs text-amber-700 text-center">{tr.activate.remainingAttempts(remainingAttempts)}</p>
             )}
 
             <button
@@ -428,7 +439,7 @@ export default function ActivatePage() {
               disabled={isSubmitting}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
-              {isSubmitting ? 'Activation...' : 'Confirmer et activer mon compte'}
+              {isSubmitting ? tr.activate.activating : tr.activate.confirm}
             </button>
 
             <button
@@ -437,21 +448,18 @@ export default function ActivatePage() {
               disabled={isSubmitting}
               className="w-full text-sm font-medium text-gray-500 hover:underline"
             >
-              ← Retour
+              {tr.common.back}
             </button>
 
             <div className="border-t border-gray-100 pt-4">
-              <p className="text-xs text-gray-500 text-center mb-2">
-                Impossible de vous rappeler&nbsp;? Le Service RH peut vérifier votre
-                identité sur place et ouvrir votre compte.
-              </p>
+              <p className="text-xs text-gray-500 text-center mb-2">{tr.activate.reviewHelp}</p>
               <button
                 type="button"
                 onClick={handleRequestReview}
                 disabled={isSubmitting}
                 className="w-full rounded-lg border border-[#1e3a5f] text-[#1e3a5f] py-2.5 text-sm font-semibold hover:bg-blue-50 transition disabled:opacity-60"
               >
-                {isSubmitting ? 'Envoi en cours...' : "Demander la vérification aux RH"}
+                {isSubmitting ? tr.common.submitting : tr.activate.requestReview}
               </button>
             </div>
           </form>
@@ -460,18 +468,18 @@ export default function ActivatePage() {
         {step === 'review_requested' && (
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Votre référence</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{tr.common.referenceLabel}</p>
               <p className="text-2xl font-bold text-[#1e3a5f] mt-1 select-all">{reviewReference}</p>
             </div>
 
             <ol className="text-sm text-gray-700 space-y-2 list-decimal pl-5">
-              <li>Notez ou gardez cette page ouverte.</li>
+              <li>{tr.activate.reviewSteps.note}</li>
               <li>
-                Présentez-vous aux Ressources Humaines avec cette référence et votre matricule
+                {tr.activate.reviewSteps.present}
                 {' '}
                 <strong>{matricule.trim()}</strong>.
               </li>
-              <li>Dès leur validation, votre compte s&apos;ouvre avec le mot de passe que vous avez choisi.</li>
+              <li>{tr.activate.reviewSteps.validated}</li>
             </ol>
 
             <button
@@ -479,14 +487,14 @@ export default function ActivatePage() {
               onClick={() => navigate('/login')}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
             >
-              Aller à la connexion
+              {tr.common.goToLogin}
             </button>
           </div>
         )}
 
         <div className="text-center mt-5">
           <Link to="/login" className="text-sm font-medium text-[#1e3a5f] hover:underline">
-            Déjà activé ? Se connecter
+            {tr.activate.alreadyActivated}
           </Link>
         </div>
       </div>

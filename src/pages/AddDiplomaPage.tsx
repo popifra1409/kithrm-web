@@ -3,16 +3,21 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { createDiploma } from '../api/diplomas';
 import type { NewDiplomaPayload } from '../api/diplomas';
 import { extractApiError } from '../api/client';
-import { lockNotice, useCensusLock } from '../context/CensusLockContext';
+import { useCensusLock } from '../context/CensusLockContext';
+import { useLang } from '../context/LangContext';
 
-const TYPES: { value: NewDiplomaPayload['type']; label: string }[] = [
-    { value: 'recruitment_diploma', label: 'Diplôme de Recrutement' },
-    { value: 'highest_diploma', label: 'Diplôme le Plus Élevé' },
-    { value: 'training', label: 'Formation' },
-];
+const TYPES = [
+    { value: 'recruitment_diploma', key: 'recruitment_diploma' },
+    { value: 'highest_diploma', key: 'highest_diploma' },
+    { value: 'training', key: 'training' },
+] as const;
+
+/** Refus produits ici, avant l'envoi : stockés par clé pour suivre la langue affichée. */
+type ClientIssue = 'titleAndInstitution' | 'invalidYear' | 'documentRequired';
 
 export default function AddDiplomaPage() {
     const navigate = useNavigate();
+    const { tr } = useLang();
     const census = useCensusLock();
 
     const [type, setType] = useState<NewDiplomaPayload['type']>('training');
@@ -22,7 +27,7 @@ export default function AddDiplomaPage() {
     const [document, setDocument] = useState<File | null>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<ClientIssue | string | null>(null);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -32,15 +37,15 @@ export default function AddDiplomaPage() {
         const currentYear = new Date().getFullYear();
 
         if (!title.trim() || !institution.trim()) {
-            setErrorMessage("L'intitulé et l'établissement sont obligatoires.");
+            setErrorMessage('titleAndInstitution');
             return;
         }
         if (!yearNumber || yearNumber < 1950 || yearNumber > currentYear) {
-            setErrorMessage(`Année invalide (entre 1950 et ${currentYear}).`);
+            setErrorMessage('invalidYear');
             return;
         }
         if (!document) {
-            setErrorMessage('Le document justificatif est obligatoire.');
+            setErrorMessage('documentRequired');
             return;
         }
 
@@ -57,7 +62,7 @@ export default function AddDiplomaPage() {
 
             navigate('/diplomas');
         } catch (error) {
-            setErrorMessage(extractApiError(error).message);
+            setErrorMessage(extractApiError(error, tr.api).message);
         } finally {
             setIsSubmitting(false);
         }
@@ -68,16 +73,16 @@ export default function AddDiplomaPage() {
     // sur le recensement, pas sur un formulaire que le serveur refuserait d'enregistrer.
     if (census.loading) return null;
     if (census.locked) {
-        return <Navigate to="/census" replace state={{ lockNotice: lockNotice('diploma') }} />;
+        return <Navigate to="/census" replace state={{ lockNoticeKind: 'diploma' }} />;
     }
 
     return (
         <div className="max-w-2xl mx-auto p-4 sm:p-8">
-            <h1 className="text-lg font-bold text-gray-900 mb-6">Nouveau Diplôme / Formation</h1>
+            <h1 className="text-lg font-bold text-gray-900 mb-6">{tr.diplomas.heading}</h1>
 
             <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{tr.diplomas.typeField}</label>
                     <div className="flex flex-col gap-2">
                         {TYPES.map((t) => (
                             <button
@@ -89,35 +94,48 @@ export default function AddDiplomaPage() {
                                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                                     }`}
                             >
-                                {t.label}
+                                {tr.diplomas.types[t.key]}
                             </button>
                         ))}
                     </div>
                 </div>
 
-                <Field label="Intitulé *" value={title} onChange={setTitle} placeholder="Ex: Licence en Sciences Infirmières" />
-                <Field label="École / Université / Organisme *" value={institution} onChange={setInstitution} />
-                <Field label="Année d'obtention *" value={year} onChange={setYear} type="number" placeholder="2020" />
+                <Field
+                    label={tr.diplomas.titleField}
+                    value={title}
+                    onChange={setTitle}
+                    placeholder={tr.diplomas.titlePlaceholder}
+                />
+                <Field label={tr.diplomas.institutionField} value={institution} onChange={setInstitution} />
+                <Field label={tr.diplomas.yearField} value={year} onChange={setYear} type="number" placeholder="2020" />
 
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Document justificatif *</label>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.diplomas.documentField}</label>
                     <input
                         type="file"
                         accept="application/pdf,image/*"
                         onChange={(e) => setDocument(e.target.files?.[0] ?? null)}
                         className="w-full text-sm"
                     />
-                    {document && <p className="text-xs text-green-700 mt-1">✅ {document.name}</p>}
+                    {document && <p className="text-xs text-green-700 mt-1">{tr.common.attached(document.name)}</p>}
                 </div>
 
-                {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+                {errorMessage && (
+                    <p className="text-sm text-red-600 text-center">
+                        {typeof errorMessage === 'string'
+                            ? errorMessage
+                            : errorMessage === 'invalidYear'
+                              ? tr.diplomas.errors.invalidYear(new Date().getFullYear())
+                              : tr.diplomas.errors[errorMessage]}
+                    </p>
+                )}
 
                 <button
                     type="submit"
                     disabled={isSubmitting}
                     className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                 >
-                    {isSubmitting ? 'Envoi...' : 'Envoyer'}
+                    {isSubmitting ? tr.common.sending : tr.common.send}
                 </button>
             </form>
         </div>

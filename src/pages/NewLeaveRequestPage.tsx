@@ -3,11 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { fetchLeaveTypes, fetchLeaveBalance, createLeave } from '../api/leaves';
 import type { LeaveType, LeaveBalance } from '../api/leaves';
 import { extractApiError } from '../api/client';
+import { useLang } from '../context/LangContext';
 import DateInput from '../components/DateInput';
 import { isoToFr } from '../lib/dates';
 
+/** Refus produits ici, avant l'envoi : stockés par clé pour suivre la langue affichée. */
+type ClientIssue = 'typeRequired' | 'datesInvalid' | 'splitDatesInvalid' | 'reasonMissing' | 'documentRequired';
+
 export default function NewLeaveRequestPage() {
     const navigate = useNavigate();
+    const { tr } = useLang();
 
     const [types, setTypes] = useState<LeaveType[]>([]);
     const [isLoadingTypes, setIsLoadingTypes] = useState(true);
@@ -27,7 +32,7 @@ export default function NewLeaveRequestPage() {
     const [document, setDocument] = useState<File | null>(null);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [errorMessage, setErrorMessage] = useState<ClientIssue | string | null>(null);
 
     useEffect(() => {
         (async () => {
@@ -36,7 +41,7 @@ export default function NewLeaveRequestPage() {
                 setTypes(data);
                 if (data.length > 0) setSelectedTypeId(data[0].id);
             } catch (error) {
-                alert(extractApiError(error).message);
+                alert(extractApiError(error, tr.api).message);
             } finally {
                 setIsLoadingTypes(false);
             }
@@ -65,23 +70,23 @@ export default function NewLeaveRequestPage() {
         setErrorMessage(null);
 
         if (!selectedTypeId) {
-            setErrorMessage('Sélectionnez un type de congé.');
+            setErrorMessage('typeRequired');
             return;
         }
         if (!isValidDate(startDate) || !isValidDate(endDate)) {
-            setErrorMessage('Dates invalides. Format attendu : JJ-MM-AAAA.');
+            setErrorMessage('datesInvalid');
             return;
         }
         if (isSplit && (!isValidDate(startDate2) || !isValidDate(endDate2))) {
-            setErrorMessage('Renseignez des dates valides (JJ-MM-AAAA) pour la 2ème prise.');
+            setErrorMessage('splitDatesInvalid');
             return;
         }
         if (!reason.trim()) {
-            setErrorMessage('Le motif est obligatoire.');
+            setErrorMessage('reasonMissing');
             return;
         }
         if (selectedType?.requires_document && !document) {
-            setErrorMessage('Un document justificatif est requis pour ce type de congé.');
+            setErrorMessage('documentRequired');
             return;
         }
 
@@ -104,7 +109,7 @@ export default function NewLeaveRequestPage() {
 
             navigate(`/leaves/${created.id}`);
         } catch (error) {
-            setErrorMessage(extractApiError(error).message);
+            setErrorMessage(extractApiError(error, tr.api).message);
         } finally {
             setIsSubmitting(false);
         }
@@ -120,11 +125,11 @@ export default function NewLeaveRequestPage() {
 
     return (
         <div className="max-w-2xl mx-auto p-4 sm:p-8">
-            <h1 className="text-lg font-bold text-gray-900 mb-6">Nouvelle Demande de Congé</h1>
+            <h1 className="text-lg font-bold text-gray-900 mb-6">{tr.leaves.heading}</h1>
 
             <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
                 <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Type de congé</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{tr.leaves.typeField}</label>
                     <div className="flex flex-wrap gap-2">
                         {types.map((t) => (
                             <button
@@ -144,56 +149,51 @@ export default function NewLeaveRequestPage() {
 
                 <div className="bg-blue-50 rounded-lg p-3 min-h-[20px] flex items-center">
                     {isLoadingBalance ? (
-                        <span className="text-xs text-blue-700">Chargement du solde...</span>
+                        <span className="text-xs text-blue-700">{tr.leaves.balanceLoading}</span>
                     ) : balance ? (
                         balance.eligible === false ? (
                             <span className="text-xs text-amber-700">
-                                ⚠️ Pas encore éligible{balance.next_eligibility_date ? ` (à partir du ${isoToFr(balance.next_eligibility_date)})` : ''}.
+                                {tr.leaves.notEligible(balance.next_eligibility_date ? isoToFr(balance.next_eligibility_date) : '')}
                             </span>
-                        ) : balance.available !== undefined ? (
+                        ) : balance.available !== undefined && balance.entitlement !== undefined ? (
                             <span className="text-xs text-blue-700">
-                                Solde : {balance.available} j disponible(s) sur {balance.entitlement} (cycle en cours)
+                                {tr.leaves.balance(balance.available, balance.entitlement)}
                             </span>
                         ) : (
-                            <span className="text-xs text-blue-700">{balance.message ?? 'Pas de solde applicable pour ce type.'}</span>
+                            <span className="text-xs text-blue-700">{balance.message ?? tr.leaves.noBalance}</span>
                         )
                     ) : null}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <DateInput label="Date de début (1ère prise) *" value={startDate} onChange={setStartDate} />
-                    <DateInput label="Date de fin (1ère prise) *" value={endDate} onChange={setEndDate} />
+                    <DateInput label={tr.leaves.startDate1} value={startDate} onChange={setStartDate} />
+                    <DateInput label={tr.leaves.endDate1} value={endDate} onChange={setEndDate} />
                 </div>
 
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                     <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="rounded" />
-                    Fractionner en 2 prises
+                    {tr.leaves.splitToggle}
                 </label>
 
                 {isSplit && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <DateInput label="Date de début (2ème prise) *" value={startDate2} onChange={setStartDate2} />
-                        <DateInput label="Date de fin (2ème prise) *" value={endDate2} onChange={setEndDate2} />
+                        <DateInput label={tr.leaves.startDate2} value={startDate2} onChange={setStartDate2} />
+                        <DateInput label={tr.leaves.endDate2} value={endDate2} onChange={setEndDate2} />
                     </div>
                 )}
 
                 {isPermission ? (
-                    <Field label="Destination" value={destination} onChange={setDestination} />
+                    <Field label={tr.leaves.destination} value={destination} onChange={setDestination} />
                 ) : (
-                    <Field label="Adresse pendant le congé" value={address} onChange={setAddress} />
+                    <Field label={tr.leaves.addressDuringLeave} value={address} onChange={setAddress} />
                 )}
 
                 {showChildrenField && (
-                    <Field
-                        label="Enfants < 6 ans (femme salariée)"
-                        value={childrenUnder6}
-                        onChange={setChildrenUnder6}
-                        type="number"
-                    />
+                    <Field label={tr.leaves.childrenUnder6} value={childrenUnder6} onChange={setChildrenUnder6} type="number" />
                 )}
 
                 <div>
-                    <label className="block text-xs font-semibold text-gray-500 mb-1">Motif *</label>
+                    <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.leaves.reasonRequired}</label>
                     <textarea
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
@@ -204,9 +204,9 @@ export default function NewLeaveRequestPage() {
 
                 <div>
                     <label className="block text-xs font-semibold text-gray-500 mb-1">
-                        Document justificatif {selectedType?.requires_document ? '*' : '(optionnel)'}
+                        {tr.leaves.documentLabel(Boolean(selectedType?.requires_document))}
                     </label>
-                    <p className="text-xs text-gray-400 mb-1">Décision signée, planning de service, ou autre justificatif</p>
+                    <p className="text-xs text-gray-400 mb-1">{tr.leaves.documentHint}</p>
                     <input
                         type="file"
                         accept="application/pdf,image/*"
@@ -215,14 +215,18 @@ export default function NewLeaveRequestPage() {
                     />
                 </div>
 
-                {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+                {errorMessage && (
+                    <p className="text-sm text-red-600 text-center">
+                        {typeof errorMessage === 'string' ? errorMessage : tr.leaves.errors[errorMessage]}
+                    </p>
+                )}
 
                 <button
                     type="submit"
                     disabled={isSubmitting}
                     className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                 >
-                    {isSubmitting ? 'Envoi...' : 'Soumettre la demande'}
+                    {isSubmitting ? tr.common.sending : tr.leaves.submit}
                 </button>
             </form>
         </div>

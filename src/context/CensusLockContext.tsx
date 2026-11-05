@@ -49,17 +49,3 @@ export function CensusLockProvider({ children }: { children: ReactNode }) {
 export function useCensusLock(): CensusLockValue {
   return useContext(CensusLockContext);
 }
-
-/** Ce qu'on dit à l'employé qu'on renvoie au recensement — une seule fois, trois écrans. */
-const LOCK_NOTICES: Record<'dependent' | 'diploma', string> = {
-  dependent:
-    "Tant que le recensement n'est pas validé, tes ayants droit se déclarent ici : une ligne ajoutée séparément " +
-    "arriverait au dossier sans les actes de filiation que les RH sont en train de vérifier.",
-  diploma:
-    "Tant que le recensement n'est pas validé, tes diplômes se déclarent ici : une ligne ajoutée séparément " +
-    'arriverait au dossier sans son document justificatif.',
-};
-
-export function lockNotice(kind: 'dependent' | 'diploma'): string {
-  return LOCK_NOTICES[kind];
-}

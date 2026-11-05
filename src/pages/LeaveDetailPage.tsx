@@ -3,10 +3,12 @@ import { useParams } from 'react-router-dom';
 import { fetchLeave } from '../api/leaves';
 import type { LeaveDetail, LeaveStep } from '../api/leaves';
 import { extractApiError } from '../api/client';
+import { useLang } from '../context/LangContext';
 import { isoToFr } from '../lib/dates';
 
 export default function LeaveDetailPage() {
     const { id } = useParams<{ id: string }>();
+    const { tr } = useLang();
     const [leave, setLeave] = useState<LeaveDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -20,7 +22,7 @@ export default function LeaveDetailPage() {
             const data = await fetchLeave(leaveId);
             setLeave(data);
         } catch (error) {
-            alert(extractApiError(error).message);
+            alert(extractApiError(error, tr.api).message);
         } finally {
             setIsLoading(false);
         }
@@ -35,7 +37,7 @@ export default function LeaveDetailPage() {
     }
 
     if (!leave) {
-        return <div className="p-10 text-gray-500">Impossible de charger la demande.</div>;
+        return <div className="p-10 text-gray-500">{tr.leaves.loadFailed}</div>;
     }
 
     return (
@@ -43,38 +45,40 @@ export default function LeaveDetailPage() {
             <div className="bg-white rounded-xl border border-gray-200 p-6 mb-4">
                 <h1 className="text-lg font-bold text-[#1e3a5f]">{leave.leave_type}</h1>
                 <p className="text-sm text-gray-700 mt-1">
-                    {isoToFr(leave.start_date)} → {isoToFr(leave.end_date)} ({leave.total_days} jour(s))
+                    {tr.leaves.range(isoToFr(leave.start_date), isoToFr(leave.end_date))} ({tr.leaves.daysLong(leave.total_days)})
                 </p>
                 {leave.is_split && leave.start_date_2 && leave.end_date_2 && (
                     <p className="text-sm text-gray-500 mt-1">
-                        2ème prise : {isoToFr(leave.start_date_2)} → {isoToFr(leave.end_date_2)}
+                        {tr.leaves.secondTake(isoToFr(leave.start_date_2), isoToFr(leave.end_date_2))}
                     </p>
                 )}
 
-                <DetailRow label="Motif" value={leave.reason} />
-                {leave.destination && <DetailRow label="Destination" value={leave.destination} />}
-                {leave.address_during_leave && <DetailRow label="Adresse pendant le congé" value={leave.address_during_leave} />}
-                {leave.replacement && <DetailRow label="Intérimaire" value={leave.replacement} />}
+                <DetailRow label={tr.leaves.reasonField} value={leave.reason} />
+                {leave.destination && <DetailRow label={tr.leaves.destination} value={leave.destination} />}
+                {leave.address_during_leave && (
+                    <DetailRow label={tr.leaves.addressDuringLeave} value={leave.address_during_leave} />
+                )}
+                {leave.replacement && <DetailRow label={tr.leaves.replacement} value={leave.replacement} />}
             </div>
 
             {leave.status === 'rejected' && (
                 <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                    <p className="font-semibold text-sm text-red-800">❌ Demande rejetée</p>
+                    <p className="font-semibold text-sm text-red-800">{tr.leaves.rejectedTitle}</p>
                     {leave.rejection_reason && <p className="text-sm text-red-700 mt-1">{leave.rejection_reason}</p>}
                 </div>
             )}
 
             {leave.status === 'approved' && (
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-4">
-                    <p className="font-semibold text-sm text-green-800">✅ Demande approuvée définitivement</p>
+                    <p className="font-semibold text-sm text-green-800">{tr.leaves.approvedTitle}</p>
                     <p className="text-sm text-green-700 mt-1">
-                        {leave.has_returned ? 'Retour enregistré.' : "Retour pas encore enregistré par les RH."}
+                        {leave.has_returned ? tr.leaves.returnedYes : tr.leaves.returnedNo}
                     </p>
                 </div>
             )}
 
             <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-sm font-bold text-[#1e3a5f] mb-4">Circuit de validation</h2>
+                <h2 className="text-sm font-bold text-[#1e3a5f] mb-4">{tr.leaves.circuitTitle}</h2>
                 {leave.steps.map((step, index) => (
                     <StepRow key={step.order} step={step} isLast={index === leave.steps.length - 1} />
                 ))}
@@ -93,6 +97,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function StepRow({ step, isLast }: { step: LeaveStep; isLast: boolean }) {
+    const { tr } = useLang();
     const config = {
         approved: { color: 'text-green-600', icon: '✅' },
         rejected: { color: 'text-red-600', icon: '❌' },
@@ -108,7 +113,7 @@ function StepRow({ step, isLast }: { step: LeaveStep; isLast: boolean }) {
             </div>
             <div className="pb-4">
                 <p className={`text-sm font-semibold ${config.color}`}>{step.name}</p>
-                {step.resolved_by && <p className="text-xs text-gray-400 mt-0.5">Par {step.resolved_by}</p>}
+                {step.resolved_by && <p className="text-xs text-gray-400 mt-0.5">{tr.leaves.actedBy(step.resolved_by)}</p>}
                 {step.acted_at && <p className="text-xs text-gray-400">{step.acted_at}</p>}
                 {step.comments && <p className="text-sm text-gray-700 mt-1 italic">{step.comments}</p>}
             </div>

@@ -51,7 +51,7 @@ export default function LoginPage() {
       await login({ matricule: matricule.trim(), password });
       navigate('/', { replace: true });
     } catch (error) {
-      const apiError = extractApiError(error);
+      const apiError = extractApiError(error, tr.api);
       setErrorMessage(apiError.message);
       const serverDenial = readLoginDenial(apiError.data);
       setDenial(serverDenial);

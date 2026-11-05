@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { PHOTO_EXTENSIONS, uploadRefusal } from '../lib/uploads';
+import { useLang } from '../context/LangContext';
 
 interface Props {
     label: string;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function PhotoCaptureInput({ label, file, onChange, required, hint, maxBytes }: Props) {
+    const { tr } = useLang();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const videoRef = useRef<HTMLVideoElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -36,7 +38,7 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
                 }
             }, 0);
         } catch {
-            setCameraError("Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.");
+            setCameraError(tr.photo.cameraDenied);
         }
     }
 
@@ -82,14 +84,14 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
                             onClick={capturePhoto}
                             className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-xs font-semibold"
                         >
-                            📸 Capturer
+                            {tr.photo.capture}
                         </button>
                         <button
                             type="button"
                             onClick={closeCamera}
                             className="flex-1 border border-gray-300 rounded-lg py-2 text-xs font-medium text-gray-700"
                         >
-                            Annuler
+                            {tr.photo.cancel}
                         </button>
                     </div>
                 </div>
@@ -109,14 +111,14 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
                             onClick={() => fileInputRef.current?.click()}
                             className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                         >
-                            📁 Choisir un fichier
+                            {tr.photo.chooseFile}
                         </button>
                         <button
                             type="button"
                             onClick={openCamera}
                             className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                         >
-                            📷 Utiliser la caméra
+                            {tr.photo.useCamera}
                         </button>
                         {file && (
                             <button
@@ -124,7 +126,7 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
                                 onClick={() => onChange(null)}
                                 className="text-xs font-medium text-red-600 hover:underline px-1"
                             >
-                                Retirer
+                                {tr.photo.remove}
                             </button>
                         )}
                     </div>
@@ -138,7 +140,10 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
 
                             // Refusé à la sélection plutôt qu'à l'envoi, là où l'écran
                             // annonce une limite : l'employé ne remplit pas tout pour rien.
-                            const refusal = picked && maxBytes ? uploadRefusal(picked, PHOTO_EXTENSIONS, maxBytes) : null;
+                            const refusal =
+                                picked && maxBytes
+                                    ? uploadRefusal(picked, PHOTO_EXTENSIONS, maxBytes, tr.uploads)
+                                    : null;
 
                             if (refusal) {
                                 alert(refusal);

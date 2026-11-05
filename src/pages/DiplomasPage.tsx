@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { fetchDiplomas, deleteDiploma } from '../api/diplomas';
 import type { Diploma } from '../api/diplomas';
 import { extractApiError } from '../api/client';
-import { lockNotice, useCensusLock } from '../context/CensusLockContext';
+import { useCensusLock } from '../context/CensusLockContext';
+import { useLang } from '../context/LangContext';
 import StatusBadge from '../components/StatusBadge';
 
 export default function DiplomasPage() {
+    const { tr } = useLang();
     const [diplomas, setDiplomas] = useState<Diploma[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const census = useCensusLock();
@@ -21,7 +23,7 @@ export default function DiplomasPage() {
             const data = await fetchDiplomas();
             setDiplomas(data);
         } catch (error) {
-            alert(extractApiError(error).message);
+            alert(extractApiError(error, tr.api).message);
         } finally {
             setIsLoading(false);
         }
@@ -29,23 +31,23 @@ export default function DiplomasPage() {
 
     async function handleDelete(diploma: Diploma) {
         if (diploma.validation_status === 'validated') {
-            alert('Ce diplôme a déjà été validé et ne peut plus être retiré ici.');
+            alert(tr.diplomas.alreadyValidated);
             return;
         }
-        if (!confirm(`Retirer "${diploma.title}" ?`)) return;
+        if (!confirm(tr.common.removeConfirm(diploma.title))) return;
 
         try {
             await deleteDiploma(diploma.id);
             load();
         } catch (error) {
-            alert(extractApiError(error).message);
+            alert(extractApiError(error, tr.api).message);
         }
     }
 
     return (
         <div className="max-w-3xl mx-auto p-4 sm:p-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-                <h1 className="text-lg font-bold text-gray-900">Diplômes & Formations</h1>
+                <h1 className="text-lg font-bold text-gray-900">{tr.diplomas.title}</h1>
                 {/* Rien pendant la lecture de l'état : un bouton « Ajouter » qui
                     apparaîtrait puis se transformerait serait cliquable entre les deux. */}
                 {!census.loading &&
@@ -54,21 +56,21 @@ export default function DiplomasPage() {
                             to="/census"
                             className="bg-white border border-[#1e3a5f] text-[#1e3a5f] rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#1e3a5f] hover:text-white transition"
                         >
-                            📋 Déclarer pendant le recensement
+                            {tr.censusLock.cta}
                         </Link>
                     ) : (
                         <Link
                             to="/diplomas/new"
                             className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
                         >
-                            + Ajouter
+                            {tr.diplomas.add}
                         </Link>
                     ))}
             </div>
 
             {census.locked && (
                 <p className="text-xs text-[#1e3a5f] bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-lg p-3 mb-4">
-                    {lockNotice('diploma')}
+                    {tr.censusLock.diploma}
                 </p>
             )}
 
@@ -77,7 +79,7 @@ export default function DiplomasPage() {
                     <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
                 </div>
             ) : diplomas.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center mt-10">Aucun diplôme ou formation renseigné pour le moment.</p>
+                <p className="text-sm text-gray-500 text-center mt-10">{tr.diplomas.empty}</p>
             ) : (
                 <div className="space-y-3">
                     {diplomas.map((dip) => (
@@ -89,14 +91,14 @@ export default function DiplomasPage() {
                             <p className="text-xs font-semibold text-[#1e3a5f]">{dip.type_label}</p>
                             <p className="text-sm text-gray-600">{dip.institution} · {dip.year_obtained}</p>
                             {dip.validation_status === 'rejected' && dip.rejection_reason && (
-                                <p className="text-xs text-red-600 mt-1">Motif : {dip.rejection_reason}</p>
+                                <p className="text-xs text-red-600 mt-1">{tr.common.reason(dip.rejection_reason)}</p>
                             )}
                             {dip.validation_status !== 'validated' && (
                                 <button
                                     onClick={() => handleDelete(dip)}
                                     className="text-xs font-semibold text-red-600 hover:underline mt-2"
                                 >
-                                    Retirer
+                                    {tr.common.remove}
                                 </button>
                             )}
                         </div>

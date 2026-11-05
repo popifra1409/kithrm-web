@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppInfo } from '../context/AppInfoContext';
+import { useLang } from '../context/LangContext';
 import { extractApiError } from '../api/client';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import {
   fetchForgotPasswordCaptcha,
   requestPasswordReset,
@@ -10,8 +12,12 @@ import {
 
 type Step = 'matricule' | 'verify' | 'requested';
 
+/** Refus produit ici, avant l'envoi : stocké par clé pour suivre la langue affichée. */
+type ClientIssue = 'matriculeRequired';
+
 export default function ForgotPasswordPage() {
   const { appInfo } = useAppInfo();
+  const { tr } = useLang();
   const navigate = useNavigate();
 
   const [step, setStep] = useState<Step>('matricule');
@@ -20,17 +26,20 @@ export default function ForgotPasswordPage() {
   const [captchaAnswer, setCaptchaAnswer] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<ClientIssue | string | null>(null);
   /** La démarche à suivre n'est pas la même si le compte n'a jamais été activé. */
   const [neverActivated, setNeverActivated] = useState(false);
   const [reference, setReference] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
 
+  const errorCopy = (message: ClientIssue | string) =>
+    message === 'matriculeRequired' ? tr.forgot.errors.matriculeRequired : message;
+
   async function handleLoadCaptcha(e: React.FormEvent) {
     e.preventDefault();
 
     if (!matricule.trim()) {
-      setErrorMessage('Saisissez votre matricule.');
+      setErrorMessage('matriculeRequired');
       return;
     }
 
@@ -42,7 +51,7 @@ export default function ForgotPasswordPage() {
       setCaptcha(await fetchForgotPasswordCaptcha(matricule.trim()));
       setStep('verify');
     } catch (error) {
-      setErrorMessage(extractApiError(error).message);
+      setErrorMessage(extractApiError(error, tr.api).message);
     } finally {
       setIsSubmitting(false);
     }
@@ -54,7 +63,7 @@ export default function ForgotPasswordPage() {
       setCaptcha(await fetchForgotPasswordCaptcha(matricule.trim()));
       setCaptchaAnswer('');
     } catch (error) {
-      setErrorMessage(extractApiError(error).message);
+      setErrorMessage(extractApiError(error, tr.api).message);
     } finally {
       setIsRefreshing(false);
     }
@@ -78,7 +87,7 @@ export default function ForgotPasswordPage() {
       setExpiresAt(review.expires_at);
       setStep('requested');
     } catch (error) {
-      const apiError = extractApiError(error);
+      const apiError = extractApiError(error, tr.api);
       setErrorMessage(apiError.message);
       setNeverActivated(apiError.status === 409);
 
@@ -94,12 +103,18 @@ export default function ForgotPasswordPage() {
   }
 
   const validityLabel = expiresAt
-    ? new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(expiresAt))
+    ? new Intl.DateTimeFormat(tr.date.locale, { day: '2-digit', month: 'long', year: 'numeric' }).format(
+        new Date(expiresAt)
+      )
     : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <div className="flex justify-end mb-2">
+          <LanguageSwitcher />
+        </div>
+
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
             <img src={appInfo.logo_url} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
@@ -111,17 +126,14 @@ export default function ForgotPasswordPage() {
           {appInfo?.hospital_name && (
             <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
           )}
-          <h1 className="text-2xl font-bold text-[#1e3a5f]">Mot de passe oublié</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Aucun mot de passe n'est envoyé automatiquement : le Service RH vous en remet un après avoir vérifié votre
-            identité.
-          </p>
+          <h1 className="text-2xl font-bold text-[#1e3a5f]">{tr.forgot.title}</h1>
+          <p className="text-sm text-gray-500 mt-1">{tr.forgot.intro}</p>
         </div>
 
         {step === 'matricule' && (
           <form onSubmit={handleLoadCaptcha} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Matricule</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{tr.common.matriculeLabel}</label>
               <input
                 type="text"
                 value={matricule}
@@ -131,28 +143,24 @@ export default function ForgotPasswordPage() {
                   setNeverActivated(false);
                 }}
                 onBlur={() => setMatricule((v) => v.trim())}
-                placeholder="Ex: 98240812A"
+                placeholder={tr.common.matriculePlaceholder}
                 autoCapitalize="characters"
                 autoComplete="username"
                 autoFocus
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
               />
-              <p className="text-xs text-gray-500 mt-1">Celui inscrit sur votre contrat, à conserver pour le Service RH.</p>
+              <p className="text-xs text-gray-500 mt-1">{tr.forgot.matriculeHint}</p>
             </div>
 
-            {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
-            {neverActivated && (
-              <p className="text-xs text-amber-700 text-center">
-                Ce compte n&apos;a jamais été ouvert&nbsp;: la démarche est l&apos;activation, pas la réinitialisation.
-              </p>
-            )}
+            {errorMessage && <p className="text-sm text-red-600 text-center">{errorCopy(errorMessage)}</p>}
+            {neverActivated && <p className="text-xs text-amber-700 text-center">{tr.forgot.neverActivated}</p>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
-              {isSubmitting ? 'Préparation...' : 'Continuer'}
+              {isSubmitting ? tr.forgot.preparing : tr.forgot.continue}
             </button>
           </form>
         )}
@@ -160,12 +168,12 @@ export default function ForgotPasswordPage() {
         {step === 'verify' && captcha && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <p className="text-sm text-gray-700">
-              Demande de réinitialisation pour <strong>{matricule.trim()}</strong>. Résolvez le calcul pour
-              enregistrer la demande.
+              {tr.forgot.verifyIntroStart} <strong>{matricule.trim()}</strong>
+              {tr.forgot.verifyIntroEnd}
             </p>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Vérification anti-robot</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{tr.common.captchaLabel}</label>
               <div className="flex items-center gap-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 mb-2">
                 <span className="flex-1 text-center text-lg font-bold text-[#1e3a5f] tracking-wide select-none">
                   {captcha.question}
@@ -175,9 +183,9 @@ export default function ForgotPasswordPage() {
                   onClick={handleRefreshCaptcha}
                   disabled={isRefreshing || isSubmitting}
                   className="text-xs font-semibold text-[#1e3a5f] hover:underline disabled:opacity-50"
-                  title="Obtenir un autre calcul"
+                  title={tr.common.captchaRefreshTitle}
                 >
-                  {isRefreshing ? '…' : '↻ Changer'}
+                  {isRefreshing ? '…' : tr.common.captchaRefresh}
                 </button>
               </div>
               <input
@@ -185,20 +193,20 @@ export default function ForgotPasswordPage() {
                 inputMode="numeric"
                 value={captchaAnswer}
                 onChange={(e) => setCaptchaAnswer(e.target.value)}
-                placeholder="Votre réponse"
+                placeholder={tr.common.answerPlaceholder}
                 autoComplete="off"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
               />
             </div>
 
-            {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+            {errorMessage && <p className="text-sm text-red-600 text-center">{errorCopy(errorMessage)}</p>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
-              {isSubmitting ? 'Envoi en cours...' : 'Demander la réinitialisation'}
+              {isSubmitting ? tr.common.submitting : tr.forgot.submit}
             </button>
 
             <button
@@ -212,7 +220,7 @@ export default function ForgotPasswordPage() {
               disabled={isSubmitting}
               className="w-full text-sm font-medium text-gray-500 hover:underline"
             >
-              ← Retour
+              {tr.common.back}
             </button>
           </form>
         )}
@@ -220,49 +228,41 @@ export default function ForgotPasswordPage() {
         {step === 'requested' && (
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
-              <p className="text-xs uppercase tracking-wide text-gray-500">Votre référence</p>
+              <p className="text-xs uppercase tracking-wide text-gray-500">{tr.common.referenceLabel}</p>
               <p className="text-2xl font-bold text-[#1e3a5f] mt-1 select-all">{reference}</p>
-              {validityLabel && (
-                <p className="text-xs text-gray-500 mt-2">Valable jusqu&apos;au {validityLabel}.</p>
-              )}
+              {validityLabel && <p className="text-xs text-gray-500 mt-2">{tr.forgot.validUntil(validityLabel)}</p>}
             </div>
 
             <ol className="text-sm text-gray-700 space-y-2 list-decimal pl-5">
-              <li>Notez ou gardez cette page ouverte.</li>
+              <li>{tr.forgot.steps.note}</li>
               <li>
-                Présentez-vous au Service RH avec cette référence et votre matricule{' '}
-                <strong>{matricule.trim()}</strong>.
+                {tr.forgot.steps.present} <strong>{matricule.trim()}</strong>.
               </li>
-              <li>Après vérification de votre identité, un agent génère un mot de passe temporaire et vous le remet.</li>
-              <li>
-                Connectez-vous avec ce mot de passe temporaire, puis changez-le depuis votre espace.
-              </li>
+              <li>{tr.forgot.steps.identity}</li>
+              <li>{tr.forgot.steps.connect}</li>
             </ol>
 
-            <p className="text-xs text-gray-500">
-              Passé le délai, la demande expire et le mot de passe temporaire n&apos;est plus émis&nbsp;: il suffit de
-              relancer la démarche.
-            </p>
+            <p className="text-xs text-gray-500">{tr.forgot.expiryNote}</p>
 
             <button
               type="button"
               onClick={() => navigate('/login')}
               className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
             >
-              Aller à la connexion
+              {tr.forgot.goToLogin}
             </button>
           </div>
         )}
 
         <div className="text-center mt-5 space-y-2">
           <p className="text-sm font-medium text-[#1e3a5f]">
-            <Link to="/login" className="hover:underline">Retour à la connexion</Link>
+            <Link to="/login" className="hover:underline">{tr.forgot.backToLogin}</Link>
           </p>
           {step !== 'requested' && (
             <p className="text-xs text-gray-500">
-              Compte jamais ouvert&nbsp;?{' '}
+              {tr.forgot.neverOpened}{' '}
               <Link to="/activate" className="font-medium text-[#1e3a5f] hover:underline">
-                Activer mon compte
+                {tr.forgot.activateLink}
               </Link>
             </p>
           )}
