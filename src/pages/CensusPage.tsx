@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   fetchCurrentCensus,
   submitCensus,
@@ -22,6 +23,7 @@ import { clearCensusDraft, loadCensusDraft, saveCensusDraft } from '../lib/censu
 import type { DraftStage } from '../lib/censusDraftStore';
 import { useConnection } from '../lib/connection';
 import { useAuth } from '../context/AuthContext';
+import { useCensusLock } from '../context/CensusLockContext';
 
 const RELATIONSHIP_LABELS: Record<string, string> = {
   spouse: 'Conjoint(e)',
@@ -195,6 +197,10 @@ const nameOf = (list: { id: number; name: string }[] | undefined, id: string) =>
 export default function CensusPage() {
   const { online } = useConnection();
   const { user } = useAuth();
+  const censusLock = useCensusLock();
+  // L'employé qu'on renvoie ici depuis « Déclarer un ayant droit » ou « Ajouter un
+  // diplôme » doit comprendre pourquoi il atterrit sur le recensement.
+  const lockNoticeText = (useLocation().state as { lockNotice?: string } | null)?.lockNotice ?? null;
   const [isLoading, setIsLoading] = useState(true);
   const [current, setCurrent] = useState<CensusCurrentResponse | null>(null);
   const [draft, setDraft] = useState<CensusDraft | null>(null);
@@ -511,7 +517,10 @@ export default function CensusPage() {
       setBankAckFor(null);
       setRefusedProblems([]);
       setRefusedFields([]);
-      alert('Votre recensement a été soumis pour validation.');
+      alert('Ton recensement a été soumis pour validation.');
+      // L'état partagé est relu après l'envoi : le verrou reste (la déclaration n'est
+      // validée qu'après le passage des RH), mais les listes affichent le bon message.
+      await censusLock.refresh();
       setStage('identity');
       load();
     } catch (error) {
@@ -809,6 +818,13 @@ export default function CensusPage() {
           <p className="font-semibold text-sm text-amber-800">↩️ {current.stage_label ?? 'Recensement annulé par les RH'}</p>
           {current.cancellation_reason && <p className="text-sm text-amber-700 mt-1">{current.cancellation_reason}</p>}
           <p className="text-xs text-amber-600 mt-1 italic">Vérifiez vos informations ci-dessous et resoumettez.</p>
+        </div>
+      )}
+
+      {lockNoticeText && (
+        <div className="bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-xl p-4 mb-4">
+          <p className="font-semibold text-sm text-[#1e3a5f]">📋 Cette déclaration se fait dans le recensement</p>
+          <p className="text-xs text-gray-600 mt-1">{lockNoticeText}</p>
         </div>
       )}
 

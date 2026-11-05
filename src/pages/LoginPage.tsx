@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAppInfo } from '../context/AppInfoContext';
+import { useLang } from '../context/LangContext';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import { extractApiError } from '../api/client';
 import {
   LOGIN_HELP_AFTER_ATTEMPTS,
@@ -14,12 +16,15 @@ import {
 export default function LoginPage() {
   const { login } = useAuth();
   const { appInfo } = useAppInfo();
+  const { tr } = useLang();
   const navigate = useNavigate();
 
   const [matricule, setMatricule] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // 'missing' désigne l'avis produit par cet écran : stocké en clé, il suit la langue
+  // choisie après son affichage. Un message du serveur reste une phrase toute faite.
+  const [errorMessage, setErrorMessage] = useState<'missing' | string | null>(null);
   // Le compteur d'échecs vit côté serveur : cet écran ne fait que restituer ce que
   // la réponse d'authentification vient d'indiquer.
   const [denial, setDenial] = useState<LoginDenial | null>(null);
@@ -35,7 +40,7 @@ export default function LoginPage() {
     e.preventDefault();
 
     if (!matricule.trim() || !password) {
-      setErrorMessage('Veuillez renseigner votre matricule et votre mot de passe.');
+      setErrorMessage('missing');
       return;
     }
 
@@ -68,6 +73,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+        <div className="flex justify-end mb-2">
+          <LanguageSwitcher />
+        </div>
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
             <img src={appInfo.logo_url} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
@@ -79,19 +87,19 @@ export default function LoginPage() {
           {appInfo?.hospital_name && (
             <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
           )}
-          <h1 className="text-2xl font-bold text-[#1e3a5f]">Connexion</h1>
-          <p className="text-sm text-gray-500 mt-1">Accédez à votre espace employé</p>
+          <h1 className="text-2xl font-bold text-[#1e3a5f]">{tr.login.title}</h1>
+          <p className="text-sm text-gray-500 mt-1">{tr.login.subtitle}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Matricule</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{tr.login.matriculeLabel}</label>
             <input
               type="text"
               value={matricule}
               onChange={(e) => handleMatriculeChange(e.target.value)}
               onBlur={() => setMatricule((v) => v.trim())}
-              placeholder="Ex: 98240812A"
+              placeholder={tr.login.matriculePlaceholder}
               autoCapitalize="characters"
               autoComplete="username"
               className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
@@ -99,7 +107,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{tr.login.passwordLabel}</label>
             <input
               type="password"
               value={password}
@@ -110,19 +118,28 @@ export default function LoginPage() {
             />
           </div>
 
-          {errorMessage && <p className="text-sm text-red-600 text-center">{errorMessage}</p>}
+          {errorMessage && (
+            <p className="text-sm text-red-600 text-center">
+              {errorMessage === 'missing' ? tr.login.missingFields : errorMessage}
+            </p>
+          )}
 
           {isLocked && denial?.retryAfterMinutes != null && (
             <p className="text-sm font-semibold text-amber-700 text-center">
-              Nouvelle tentative possible dans {denial.retryAfterMinutes} minute(s).
+              {tr.login.lockedRetry(denial.retryAfterMinutes)}
             </p>
           )}
 
           {!showHelp && !isLocked && attemptsUsed > 0 && (
             <p className="text-xs text-gray-500 text-center leading-relaxed">
               {attemptsUsed >= LOGIN_HELP_AFTER_ATTEMPTS
-                ? `Échec ${attemptsUsed} sur ${MAX_LOGIN_ATTEMPTS}. Au ${MAX_LOGIN_ATTEMPTS}e échec, le compte sera mis en pause pendant ${LOGIN_LOCK_MINUTES} minutes.`
-                : `Échec ${attemptsUsed} sur ${MAX_LOGIN_ATTEMPTS}. Une aide s'affichera après ${LOGIN_HELP_AFTER_ATTEMPTS} tentatives ; au ${MAX_LOGIN_ATTEMPTS}e échec, le compte sera mis en pause pendant ${LOGIN_LOCK_MINUTES} minutes.`}
+                ? tr.login.attemptsWithoutHelp(attemptsUsed, MAX_LOGIN_ATTEMPTS, LOGIN_LOCK_MINUTES)
+                : tr.login.attemptsWithHelp(
+                    attemptsUsed,
+                    MAX_LOGIN_ATTEMPTS,
+                    LOGIN_HELP_AFTER_ATTEMPTS,
+                    LOGIN_LOCK_MINUTES,
+                  )}
             </p>
           )}
 
@@ -132,7 +149,7 @@ export default function LoginPage() {
               onClick={() => setHelpDismissed(false)}
               className="w-full text-center text-xs font-semibold text-[#1e3a5f] hover:underline"
             >
-              Besoin d&apos;aide ? Afficher les démarches
+              {tr.login.showHelp}
             </button>
           )}
 
@@ -141,7 +158,7 @@ export default function LoginPage() {
             disabled={isSubmitting}
             className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
           >
-            {isSubmitting ? 'Connexion...' : 'Se connecter'}
+            {isSubmitting ? tr.login.submitting : tr.login.submit}
           </button>
         </form>
 
@@ -152,20 +169,20 @@ export default function LoginPage() {
         {!showHelp && (
           <div className="text-center mt-5">
             <Link to="/activate" className="text-sm font-medium text-[#1e3a5f] hover:underline">
-              Première connexion&nbsp;? Activer mon compte
+              {tr.login.firstConnectionLink}
             </Link>
           </div>
         )}
 
         {showHelp && (
           <div className="mt-5 rounded-lg border border-[#1e3a5f]/25 bg-[#1e3a5f]/5 p-4">
-            <p className="text-sm font-semibold text-[#1e3a5f]">Vous n'arrivez pas à vous connecter&nbsp;?</p>
+            <p className="text-sm font-semibold text-[#1e3a5f]">{tr.login.helpTitle}</p>
             <p className="text-xs text-gray-600 mt-1 leading-relaxed">
               {needsActivation
-                ? "Votre compte n'a jamais été ouvert : la démarche est l'activation, avec le mot de passe temporaire remis par le Service RH."
+                ? tr.login.helpNeedsActivation
                 : isLocked
-                  ? "Votre compte est en pause après plusieurs échecs. Vous pouvez quand même lancer dès maintenant l'une de ces démarches :"
-                  : "Trois options s'offrent à vous. Un agent du Service RH vérifie votre identité sur place, puis traite votre demande :"}
+                  ? tr.login.helpLocked
+                  : tr.login.helpChoices}
             </p>
 
             <div className="mt-3 space-y-2">
@@ -173,15 +190,15 @@ export default function LoginPage() {
                 to="/activate"
                 className="flex items-center justify-between rounded-lg border border-[#1e3a5f] bg-white px-4 py-2.5 text-sm font-semibold text-[#1e3a5f] hover:bg-[#1e3a5f] hover:text-white transition"
               >
-                <span>Activer mon compte</span>
-                <span className="text-xs font-normal opacity-70">première connexion</span>
+                <span>{tr.login.activateLink}</span>
+                <span className="text-xs font-normal opacity-70">{tr.login.activateTag}</span>
               </Link>
               <Link
                 to="/forgot-password"
                 className="flex items-center justify-between rounded-lg border border-[#1e3a5f] bg-white px-4 py-2.5 text-sm font-semibold text-[#1e3a5f] hover:bg-[#1e3a5f] hover:text-white transition"
               >
-                <span>Mot de passe oublié</span>
-                <span className="text-xs font-normal opacity-70">réinitialisation</span>
+                <span>{tr.login.forgotLink}</span>
+                <span className="text-xs font-normal opacity-70">{tr.login.forgotTag}</span>
               </Link>
               {!isLocked && (
                 <button
@@ -189,7 +206,7 @@ export default function LoginPage() {
                   onClick={() => setHelpDismissed(true)}
                   className="w-full rounded-lg px-4 py-2 text-sm text-gray-600 hover:text-[#1e3a5f] underline underline-offset-2"
                 >
-                  Continuer mes tentatives ({denial?.attemptsLeft ?? MAX_LOGIN_ATTEMPTS} restante(s))
+                  {tr.login.keepTrying(denial?.attemptsLeft ?? MAX_LOGIN_ATTEMPTS)}
                 </button>
               )}
             </div>

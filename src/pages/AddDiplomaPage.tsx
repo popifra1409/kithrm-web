@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { createDiploma } from '../api/diplomas';
 import type { NewDiplomaPayload } from '../api/diplomas';
 import { extractApiError } from '../api/client';
+import { lockNotice, useCensusLock } from '../context/CensusLockContext';
 
 const TYPES: { value: NewDiplomaPayload['type']; label: string }[] = [
     { value: 'recruitment_diploma', label: 'Diplôme de Recrutement' },
@@ -12,6 +13,7 @@ const TYPES: { value: NewDiplomaPayload['type']; label: string }[] = [
 
 export default function AddDiplomaPage() {
     const navigate = useNavigate();
+    const census = useCensusLock();
 
     const [type, setType] = useState<NewDiplomaPayload['type']>('training');
     const [title, setTitle] = useState('');
@@ -59,6 +61,14 @@ export default function AddDiplomaPage() {
         } finally {
             setIsSubmitting(false);
         }
+    }
+
+    // Le verrou se place après les hooks du formulaire, sinon leur nombre changerait
+    // d'un rendu à l'autre. Un lien périmé ou une URL saisie à la main doivent tomber
+    // sur le recensement, pas sur un formulaire que le serveur refuserait d'enregistrer.
+    if (census.loading) return null;
+    if (census.locked) {
+        return <Navigate to="/census" replace state={{ lockNotice: lockNotice('diploma') }} />;
     }
 
     return (

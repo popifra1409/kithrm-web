@@ -3,11 +3,13 @@ import { Link } from 'react-router-dom';
 import { fetchDiplomas, deleteDiploma } from '../api/diplomas';
 import type { Diploma } from '../api/diplomas';
 import { extractApiError } from '../api/client';
+import { lockNotice, useCensusLock } from '../context/CensusLockContext';
 import StatusBadge from '../components/StatusBadge';
 
 export default function DiplomasPage() {
     const [diplomas, setDiplomas] = useState<Diploma[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const census = useCensusLock();
 
     useEffect(() => {
         load();
@@ -44,13 +46,31 @@ export default function DiplomasPage() {
         <div className="max-w-3xl mx-auto p-4 sm:p-8">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
                 <h1 className="text-lg font-bold text-gray-900">Diplômes & Formations</h1>
-                <Link
-                    to="/diplomas/new"
-                    className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
-                >
-                    + Ajouter
-                </Link>
+                {/* Rien pendant la lecture de l'état : un bouton « Ajouter » qui
+                    apparaîtrait puis se transformerait serait cliquable entre les deux. */}
+                {!census.loading &&
+                    (census.locked ? (
+                        <Link
+                            to="/census"
+                            className="bg-white border border-[#1e3a5f] text-[#1e3a5f] rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#1e3a5f] hover:text-white transition"
+                        >
+                            📋 Déclarer pendant le recensement
+                        </Link>
+                    ) : (
+                        <Link
+                            to="/diplomas/new"
+                            className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
+                        >
+                            + Ajouter
+                        </Link>
+                    ))}
             </div>
+
+            {census.locked && (
+                <p className="text-xs text-[#1e3a5f] bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-lg p-3 mb-4">
+                    {lockNotice('diploma')}
+                </p>
+            )}
 
             {isLoading ? (
                 <div className="flex justify-center p-10">

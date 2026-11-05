@@ -137,6 +137,23 @@ export async function fetchCurrentCensus(): Promise<CensusCurrentResponse> {
   return data;
 }
 
+/**
+ * État léger du recensement, lu sur toutes les pages du portail. « locked » dit si
+ * l'ajout direct d'un ayant droit ou d'un diplôme est coupé au profit du formulaire ;
+ * la règle est dans le serveur, le web ne fait que la répéter.
+ */
+export interface CensusLockState {
+  campaign: { id: number; name: string; ends_at: string | null } | null;
+  submission_status: string | null;
+  stage_label: string | null;
+  locked: boolean;
+}
+
+export async function fetchCensusLockState(): Promise<CensusLockState> {
+  const { data } = await apiClient.get<CensusLockState>('/employee/census/state');
+  return data;
+}
+
 export interface CensusDraftDependent {
   existing_id: number | null;
   relationship: 'spouse' | 'child' | 'father' | 'mother';

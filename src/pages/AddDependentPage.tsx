@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { createDependent } from '../api/dependents';
 import type { NewDependentPayload } from '../api/dependents';
 import { extractApiError } from '../api/client';
+import { lockNotice, useCensusLock } from '../context/CensusLockContext';
 import DateInput from '../components/DateInput';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 
@@ -15,6 +16,7 @@ const RELATIONSHIPS: { value: NewDependentPayload['relationship']; label: string
 
 export default function AddDependentPage() {
     const navigate = useNavigate();
+    const census = useCensusLock();
 
     const [relationship, setRelationship] = useState<NewDependentPayload['relationship']>('child');
     const [firstName, setFirstName] = useState('');
@@ -76,6 +78,14 @@ export default function AddDependentPage() {
         } finally {
             setIsSubmitting(false);
         }
+    }
+
+    // Après les hooks, sinon leur nombre changerait d'un rendu à l'autre. Le formulaire
+    // n'est pas rendu un instant : un lien périmé mène au recensement, pas à une
+    // déclaration que le serveur refuserait d'enregistrer.
+    if (census.loading) return null;
+    if (census.locked) {
+        return <Navigate to="/census" replace state={{ lockNotice: lockNotice('dependent') }} />;
     }
 
     return (
