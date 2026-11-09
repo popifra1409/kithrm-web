@@ -34,11 +34,11 @@ export default function LanguageSwitcher({ tone = 'light' }: { tone?: 'light' | 
                         className={`px-2 py-1 rounded-md text-[11px] font-bold tracking-wide transition ${
                             isActive
                                 ? tone === 'dark'
-                                    ? 'bg-white text-[#1e3a5f]'
-                                    : 'bg-[#1e3a5f] text-white'
+                                    ? 'bg-surface text-accent'
+                                    : 'bg-primary text-white'
                                 : tone === 'dark'
                                   ? 'text-white/70 hover:text-white'
-                                  : 'text-gray-500 hover:text-[#1e3a5f]'
+                                  : 'text-gray-500 hover:text-accent'
                         }`}
                     >
                         {option.short}

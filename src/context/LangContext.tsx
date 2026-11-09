@@ -3,10 +3,11 @@ import type { ReactNode } from 'react';
 import { fr } from '../i18n/fr';
 import type { Dict } from '../i18n/fr';
 import { en } from '../i18n/en';
+import { announcePreferenceChange } from '../lib/preferences';
 
 export type Lang = 'fr' | 'en';
 
-const LANG_STORAGE_KEY = 'kithrm_lang';
+export const LANG_STORAGE_KEY = 'kithrm_lang';
 
 interface LangValue {
   lang: Lang;
@@ -15,7 +16,8 @@ interface LangValue {
   tr: Dict;
 }
 
-function readStoredLang(): Lang {
+/** Valeur de l'appareil, telle qu'elle est stockée — la lit aussi la synchronisation par compte. */
+export function readStoredLang(): Lang {
   // Tout ce qui n'est pas « en » retombe sur le français : la langue par défaut du
   // portail, y compris si la touche a été écrite par une autre application.
   return localStorage.getItem(LANG_STORAGE_KEY) === 'en' ? 'en' : 'fr';
@@ -33,6 +35,7 @@ export function LangProvider({ children }: { children: ReactNode }) {
   const setLang = useCallback((next: Lang) => {
     localStorage.setItem(LANG_STORAGE_KEY, next);
     setLangState(next);
+    announcePreferenceChange();
   }, []);
 
   // Les lecteurs d'écran et le navigateur prononcent les étiquettes selon cette valeur ;

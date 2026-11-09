@@ -15,7 +15,7 @@ interface DateInputProps {
 
 const DEFAULT_LABEL = 'block text-xs font-semibold text-gray-500 mb-1';
 const DEFAULT_INPUT =
-    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]';
+    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary';
 const FLAGGED_INPUT =
     'w-full rounded-lg border border-red-400 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400';
 

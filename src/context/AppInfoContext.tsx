@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { fetchAppInfo } from '../api/appInfo';
 import type { AppInfo } from '../api/appInfo';
+import { fileUrl } from '../lib/fileUrl';
 
 interface AppInfoContextValue {
     appInfo: AppInfo | null;
@@ -21,7 +22,7 @@ export function AppInfoProvider({ children }: { children: React.ReactNode }) {
 
                 // L'icône de l'onglet doit suivre le logo des « Infos de la structure » :
                 // le <link> de index.html n'est qu'un repli tant que l'API n'a pas répondu.
-                const iconUrl = data.favicon_url ?? data.logo_url;
+                const iconUrl = fileUrl(data.favicon_url ?? data.logo_url);
 
                 if (iconUrl) {
                     let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");

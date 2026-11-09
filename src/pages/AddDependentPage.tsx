@@ -98,7 +98,7 @@ export default function AddDependentPage() {
         <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <h1 className="text-lg font-bold text-gray-900 mb-6">{tr.dependents.heading}</h1>
 
-            <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="bg-surface rounded-xl border border-gray-200 p-6 space-y-5">
                 <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                         {tr.dependents.relationshipField}
@@ -110,7 +110,7 @@ export default function AddDependentPage() {
                                 key={r.value}
                                 onClick={() => setRelationship(r.value)}
                                 className={`px-3 py-1.5 rounded-full text-sm border ${relationship === r.value
-                                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                                        ? 'bg-primary text-white border-accent'
                                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                                     }`}
                             >
@@ -136,14 +136,14 @@ export default function AddDependentPage() {
                         <button
                             type="button"
                             onClick={() => setGender('M')}
-                            className={`px-3 py-1.5 rounded-full text-sm border ${gender === 'M' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
+                            className={`px-3 py-1.5 rounded-full text-sm border ${gender === 'M' ? 'bg-primary text-white border-accent' : 'border-gray-300 text-gray-700'}`}
                         >
                             {tr.dependents.male}
                         </button>
                         <button
                             type="button"
                             onClick={() => setGender('F')}
-                            className={`px-3 py-1.5 rounded-full text-sm border ${gender === 'F' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
+                            className={`px-3 py-1.5 rounded-full text-sm border ${gender === 'F' ? 'bg-primary text-white border-accent' : 'border-gray-300 text-gray-700'}`}
                         >
                             {tr.dependents.female}
                         </button>
@@ -154,7 +154,7 @@ export default function AddDependentPage() {
 
                 <PhotoCaptureInput label={tr.dependents.photo} file={photo} onChange={setPhoto} />
 
-                <h2 className="text-sm font-bold text-[#1e3a5f] pt-2">{tr.common.supportingDocuments}</h2>
+                <h2 className="text-sm font-bold text-accent pt-2">{tr.common.supportingDocuments}</h2>
 
                 <FileField label={tr.dependents.birthCertificate} file={birthCertificate} onChange={setBirthCertificate} />
                 {relationship === 'spouse' && (
@@ -171,7 +171,7 @@ export default function AddDependentPage() {
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                    className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                 >
                     {isSubmitting ? tr.common.sending : tr.common.send}
                 </button>
@@ -201,7 +201,7 @@ function Field({
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
         </div>
     );

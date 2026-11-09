@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { fetchDependents, deleteDependent } from '../api/dependents';
 import type { Dependent } from '../api/dependents';
 import { extractApiError } from '../api/client';
+import { fileUrl } from '../lib/fileUrl';
 import { useCensusLock } from '../context/CensusLockContext';
 import { useLang } from '../context/LangContext';
 import StatusBadge from '../components/StatusBadge';
@@ -54,14 +55,14 @@ export default function DependentsPage() {
                     (census.locked ? (
                         <Link
                             to="/census"
-                            className="bg-white border border-[#1e3a5f] text-[#1e3a5f] rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#1e3a5f] hover:text-white transition"
+                            className="bg-surface border border-accent text-accent rounded-lg px-4 py-2 text-sm font-semibold hover:bg-primary hover:text-white transition"
                         >
                             {tr.censusLock.cta}
                         </Link>
                     ) : (
                         <Link
                             to="/dependents/new"
-                            className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
+                            className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
                         >
                             {tr.dependents.add}
                         </Link>
@@ -69,23 +70,23 @@ export default function DependentsPage() {
             </div>
 
             {census.locked && (
-                <p className="text-xs text-[#1e3a5f] bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-lg p-3 mb-4">
+                <p className="text-xs text-accent bg-primary/5 border border-accent/20 rounded-lg p-3 mb-4">
                     {tr.censusLock.dependent}
                 </p>
             )}
 
             {isLoading ? (
                 <div className="flex justify-center p-10">
-                    <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                 </div>
             ) : dependents.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center mt-10">{tr.dependents.empty}</p>
             ) : (
                 <div className="space-y-3">
                     {dependents.map((dep) => (
-                        <div key={dep.id} className="bg-white rounded-xl border border-gray-200 p-4 flex gap-3">
+                        <div key={dep.id} className="bg-surface rounded-xl border border-gray-200 p-4 flex gap-3">
                             {dep.photo_url ? (
-                                <img src={dep.photo_url} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
+                                <img src={fileUrl(dep.photo_url) ?? undefined} alt="" className="w-12 h-12 rounded-full object-cover shrink-0" />
                             ) : (
                                 <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 shrink-0">
                                     👤

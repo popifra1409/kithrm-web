@@ -27,6 +27,7 @@ export const fr = {
             dependents: 'Ayants Droit',
             diplomas: 'Diplômes',
             census: 'Recensement',
+            preferences: 'Préférences',
         },
     },
     login: {
@@ -100,26 +101,36 @@ export const fr = {
     connection: {
         serverUnreachable: 'Le serveur de la RH est injoignable',
         serverUnreachableDetail:
-            'Ton réseau fonctionne, mais le serveur ne répond pas. Réessaie dans un instant.',
+            'Votre réseau fonctionne, mais le serveur n’a pas répondu. Réessayez dans un instant.',
+        originBlocked: 'Le serveur répond, mais votre navigateur refuse ses réponses',
+        originBlockedDetail:
+            'L’adresse de cette page ne figure pas dans la liste des adresses autorisées par le serveur de la RH. Ce n’est pas votre connexion : prévenez le Service RH.',
+        mixedContent: 'Cette page est en connexion sécurisée, le serveur de la RH ne l’est pas',
+        mixedContentDetail:
+            'Un navigateur ne peut pas appeler une adresse « http » depuis une page sécurisée. Dans la structure, ouvrez directement l’adresse du serveur local, par exemple http://116.72.30.12:8084.',
+        serverAnswers: 'Le serveur de la RH renvoie une erreur',
+        serverAnswersDetail:
+            'Votre adresse est bonne et le serveur répond, mais il signale une erreur de son côté. Réessayez dans un instant ; si cela dure, prévenez le Service RH.',
         internetLost: 'Connexion internet perdue',
-        internetLostDetail: 'Vérifie le Wi-Fi ou les données mobiles de l’appareil.',
-        draftKept: 'Tes informations déjà saisies restent enregistrées sur cet appareil.',
+        internetLostDetail: 'Vérifiez le Wi-Fi ou les données mobiles de l’appareil.',
+        draftKept: 'Les informations déjà saisies restent enregistrées sur cet appareil.',
         retry: 'Réessayer',
         retrying: 'Test…',
     },
     notFound: {
         title: 'Adresse introuvable',
-        body: 'Cette page n’existe pas dans ton espace employé. Le lien est peut-être incomplet ou ancien.',
+        body: 'Cette page n’existe pas dans votre espace employé. Le lien est peut-être incomplet ou ancien.',
         backHome: 'Retour à l’accueil',
         signIn: 'Se connecter',
-        hrHint: 'En cas de doute, préviens le service des Ressources Humaines.',
+        hrHint: 'En cas de doute, prévenez le Service RH.',
     },
     /** Replis quand le serveur ne fournit pas de message : les textes du serveur eux-mêmes
         restent en français tant que les fichiers de langue Laravel ne sont pas en place. */
     api: {
         generic: 'Une erreur est survenue.',
-        timeout: 'La requête a expiré. Vérifiez votre connexion.',
-        unreachable: 'Impossible de joindre le serveur. Vérifiez votre connexion internet.',
+        timeout: 'La requête a expiré avant de recevoir une réponse. Réessayez dans un instant.',
+        unreachable:
+            'Le serveur de la RH n’a pas répondu. Le bandeau affiché en haut de la page explique pourquoi.',
         unexpected: 'Une erreur inattendue est survenue.',
     },
     uploads: {
@@ -645,6 +656,110 @@ export const fr = {
             passwordShort: 'Le nouveau mot de passe doit contenir au moins 8 caractères.',
             confirmWord: (word: string) => `Veuillez taper ${word} pour confirmer.`,
             passwordRequired: 'Veuillez saisir votre mot de passe.',
+        },
+    },
+    preferences: {
+        title: 'Préférences',
+        intro:
+            'Ils s’appliquent immédiatement, sans bouton à valider. La langue, l’apparence et la police suivent votre compte sur vos autres appareils ; l’adresse du serveur reste réglée sur celui que vous utilisez, car elle dépend du réseau où vous êtes branché.',
+        storageRefused:
+            'Réglage appliqué maintenant, mais il ne sera pas retrouvé à la prochaine ouverture et ne suivra pas votre compte : ce navigateur refuse d’enregistrer des préférences (navigation privée, extension de confidentialité).',
+        theme: {
+            section: 'Apparence',
+            label: 'Thème',
+            hint:
+                '« Système » suit le réglage de votre appareil, y compris lorsqu’il change pendant que vous utilisez le portail. Seuls les fonds passent en sombre : la mise en page et les couleurs de chaque bouton restent les mêmes.',
+            options: {
+                light: 'Clair',
+                dark: 'Sombre',
+                system: 'Système',
+            },
+        },
+        font: {
+            section: 'Police d’écriture',
+            sizeLabel: 'Taille du texte',
+            sizeHint: 'Toute l’interface suit, y compris les boutons et les tableaux, et non le texte seul.',
+            sizeOptions: {
+                sm: 'Petit',
+                md: 'Normal',
+                lg: 'Grand',
+            },
+            familyLabel: 'Style de police',
+            familyHint:
+                'Ce sont des polices déjà installées sur l’ordinateur ou le téléphone : rien n’est téléchargé, donc le portail reste lisible sans connexion Internet.',
+            familyOptions: {
+                system: 'Standard',
+                arial: 'Arial',
+                verdana: 'Verdana',
+                georgia: 'Georgia',
+            },
+        },
+        sync: {
+            section: 'Compte et appareils',
+            states: {
+                reading: 'Lecture de votre compte en cours…',
+                queued: 'Vos réglages viennent de changer : enregistrement dans un instant.',
+                writing: 'Enregistrement sur votre compte en cours…',
+                syncedJustNow: 'Vos réglages sont enregistrés sur votre compte : ils vous suivront sur tout appareil où vous vous reconnecterez.',
+                syncedAligned: 'Rien à enregistrer : cet appareil et votre compte ont exactement les mêmes réglages.',
+                lastExchangeAt: (time: string) => `Dernier échange avec le compte à ${time}.`,
+                offline:
+                    'Le serveur n’a pas répondu : vos réglages restent appliqués sur cet appareil, et votre compte garde sa copie précédente. Réessayez quand la connexion revient.',
+                noRoute:
+                    'Le serveur d’API joint ne connaît pas encore les réglages de compte : ce portail est plus récent que lui. Vos réglages fonctionnent sur cet appareil, mais ils ne vous suivront pas ailleurs tant que le serveur n’est pas mis à jour — signalez-le au Service RH.',
+                refused: (status: number) =>
+                    `Le serveur a refusé l’enregistrement (code ${status}) : votre compte garde sa copie précédente. Ce navigateur et ce serveur n’ont probablement pas la même version.`,
+            },
+            retry: 'Synchroniser maintenant',
+            retryHint: 'Relit le compte et lui renvoie ce qui manque, sans recharger la page.',
+            note:
+                'Suivent votre compte : la langue, l’apparence et la police. Reste réglé sur cet appareil : l’adresse du serveur, puisqu’elle dépend du réseau où vous êtes branché.',
+        },
+        language: {
+            section: 'Langue',
+            hint:
+                'C’est le réglage choisi ici qui sert dans tout le portail ; les écrans de connexion et d’activation gardent leurs boutons FR / EN, car ils se passent avant que l’on sache qui vous êtes.',
+        },
+        server: {
+            section: 'Serveur',
+            currentLabel: 'Adresse en service',
+            currentHint: (origin: string) => `Choisie par ${origin}.`,
+            origins: {
+                override: 'votre réglage de ce navigateur',
+                config: 'le fichier de configuration posé sur le serveur',
+                build: 'l’adresse embarquée dans la version installée',
+            },
+            sameOrigin: 'même origine que cette page',
+            testButton: 'Tester la connexion',
+            testAgainButton: 'Tester de nouveau',
+            testing: 'Test en cours…',
+            ok: (ms: number, name: string) => `✅ Serveur joint en ${ms} ms : ${name}.`,
+            okNoName: (ms: number) => `✅ Serveur joint en ${ms} ms.`,
+            http: (status: number) =>
+                `⚠️ Une réponse est bien arrivée, mais le serveur renvoie une erreur HTTP ${status}. L’adresse est peut-être celle du site au lieu de celle de l’API : elle se termine normalement par « /api ».`,
+            timeout: (seconds: number) =>
+                `⏱️ Aucune réponse au bout de ${seconds} secondes. Le serveur ne répond pas, ou met plus de temps que cette limite.`,
+            opaque:
+                '⚠️ Le serveur a bien répondu, mais le navigateur interdit la lecture de sa réponse : l’adresse de ce site ne figure pas dans la liste des sites autorisés par l’API (réglage du serveur).',
+            unreachable:
+                '❌ Cette adresse n’a pas répondu, ou le navigateur a bloqué la requête avant de l’envoyer. Les deux se ressemblent depuis la page : vérifiez l’adresse saisie, puis l’accès au réseau.',
+            mixedContent:
+                '🚫 Le navigateur ne peut pas tester cette adresse : cette page est servie en connexion sécurisée (https), et un serveur local en http ne peut pas être appelé depuis une page sécurisée.',
+            mixedContentHowTo:
+                'Dans la structure, ouvrez directement l’adresse du serveur local dans le navigateur (par exemple http://116.72.30.12:8084). La page et l’API partent alors de la même origine : les appels ne sont plus bloqués, et ce réglage devient inutile.',
+            overrideTitle: 'Adresse à utiliser depuis ce navigateur',
+            overrideHint:
+                'À réserver au réseau local de la structure, ou à un dépannage. Tant que ce champ est vide, c’est l’adresse prévue par le serveur qui s’applique.',
+            overridePlaceholder: 'Ex : http://116.72.30.12:8084/api',
+            save: 'Enregistrer',
+            clear: 'Revenir à l’adresse du serveur',
+            saved: 'Adresse enregistrée pour ce navigateur. Elle s’applique dès l’appel suivant, sans vous déconnecter.',
+            cleared: 'Votre réglage a été supprimé : c’est de nouveau l’adresse du serveur qui s’applique.',
+            invalidAddress:
+                'Adresse incomplète : indiquez le serveur avec « http:// » ou « https:// », ou un chemin commençant par « / », par exemple « /api ».',
+            emptyAddress: 'Saisissez une adresse, ou choisissez « Revenir à l’adresse du serveur ».',
+            notStoredAddress:
+                'Adresse appliquée tout de suite, mais ce navigateur refuse de l’enregistrer : elle sera oubliée à la prochaine ouverture.',
         },
     },
 };

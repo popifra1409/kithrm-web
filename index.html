@@ -7,6 +7,23 @@
     <!-- « lang » règle aussi la langue des contrôles natifs du navigateur : en « en »,
         chaque bouton de fichier affichait « Choose File / No file chosen ». -->
     <title>Espace personnel</title>
+    <script>
+      // Le thème est posé avant la feuille de style : sans ce fichier, une machine réglée en
+      // sombre afficherait le fond blanc du document pendant le chargement du module. La logique
+      // fait foi dans src/lib/preferences.ts, qui réapplique la même valeur au démarrage.
+      (() => {
+        let choice = null;
+
+        try {
+          choice = localStorage.getItem('kithrm_theme');
+        } catch {}
+
+        const dark = choice === 'dark'
+          || (choice !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,5 +1,79 @@
 @import "tailwindcss";
 
-:root {
+/*
+ * Couche de thème (étape 5).
+ *
+ * Tailwind v4 compile chaque couleur d'utilitaire en `var(--color-…)` : sous une valeur
+ * `data-theme="dark"` posée sur <html>, la rampe de gris et les teintes d'état se retournent
+ * sans toucher aux écrans. Trois jetons sémantiques portent ce que la rampe ne peut pas dire :
+ * le bleu de l'hôpital employé comme surface (en-tête, bouton), la même teinte quand elle sert
+ * de texte ou de liseré sur la surface courante, et le fond des cartes.
+ *
+ * `--color-white` reste blanc : `text-white` lit sur les panneaux bleus dans les deux thèmes.
+ */
+@theme {
+  /* Surface de marque : en-têtes, boutons, anneau de focus. */
   --color-primary: #1e3a5f;
+  /* Même teinte lorsqu'elle sert de texte, d'icône ou de bordure sur la surface courante. */
+  --color-accent: #1e3a5f;
+  /* Fond des cartes ; `bg-white` n'est plus employé directement. */
+  --color-surface: #ffffff;
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  /* Les contrôles natifs (listes déroulantes, calendrier, ascenseurs) suivent le thème. */
+  color-scheme: dark;
+
+  --color-primary: #21456b;
+  --color-accent: #8fb7e0;
+  --color-surface: #1b2430;
+
+  /* Petits indices = surfaces, grands indices = textes : la rampe s'inverse. */
+  --color-gray-50: #101820;
+  --color-gray-100: #161f2a;
+  --color-gray-200: #1d2734;
+  --color-gray-300: #2a3646;
+  --color-gray-400: #64748b;
+  --color-gray-500: #94a3b8;
+  --color-gray-600: #b6c2d1;
+  --color-gray-700: #d5dce6;
+  --color-gray-800: #e7ecf3;
+  --color-gray-900: #f4f7fb;
+
+  /* Les indices 400 à 600 des teintes d'état ne sont pas retouchés : ce sont les tons pleins
+     des boutons « supprimer » et des anneaux d'erreur, qui doivent rester foncés sous un
+     texte blanc dans les deux thèmes. */
+  --color-red-50: #2a1519;
+  --color-red-100: #3a1a20;
+  --color-red-200: #55232b;
+  --color-red-300: #6e2c37;
+  --color-red-700: #f2a2a9;
+  --color-red-800: #f6c2c6;
+
+  --color-amber-50: #291d0f;
+  --color-amber-100: #3a2812;
+  --color-amber-200: #55401c;
+  --color-amber-300: #6d5322;
+  --color-amber-700: #f3cd8a;
+  --color-amber-800: #f7dda6;
+  --color-amber-900: #fae9c0;
+
+  --color-green-50: #0f2318;
+  --color-green-100: #143022;
+  --color-green-200: #1c4531;
+  --color-green-700: #8fdcae;
+  --color-green-800: #b4e9c8;
+
+  --color-blue-50: #101f33;
+  --color-blue-100: #142a44;
+  --color-blue-200: #1d3c60;
+  --color-blue-300: #274d78;
+  --color-blue-700: #9cc4f2;
+  --color-blue-800: #bcd7f7;
+
+  --color-emerald-700: #8fdcae;
 }

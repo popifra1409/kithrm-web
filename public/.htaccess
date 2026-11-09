@@ -2,6 +2,14 @@
   RewriteEngine On
   RewriteBase /
   RewriteRule ^index\.html$ - [L]
+  # Une URL de pièce jointe (« /storage/… », renvoyée par l'API puis préfixée par
+  # src/lib/fileUrl.ts) ne doit jamais retomber sur index.html. Sans cette exclusion, le
+  # magasin absent ou non exposé répond la PAGE du front avec un code 200 : le <img> de
+  # l'agent affiche un cadre vide, un lien « télécharger » télécharge du HTML, et aucun code
+  # d'erreur nulle part. Exclure le préfixe transforme ce succès mensonger en 404 honnête.
+  # Les octets, eux, ne viennent que de la règle « Alias » du vhost (dossier #51) : ce
+  # fichier reste identique sur les deux machines, il ne contient aucun chemin absolu.
+  RewriteCond %{REQUEST_URI} !^/storage(/|$)
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule . /index.html [L]

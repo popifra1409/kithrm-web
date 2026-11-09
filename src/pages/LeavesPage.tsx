@@ -39,7 +39,7 @@ export default function LeavesPage() {
                 <h1 className="text-lg font-bold text-gray-900">{tr.leaves.title}</h1>
                 <Link
                     to="/leaves/new"
-                    className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
+                    className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
                 >
                     {tr.leaves.add}
                 </Link>
@@ -47,7 +47,7 @@ export default function LeavesPage() {
 
             {isLoading ? (
                 <div className="flex justify-center p-10">
-                    <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                 </div>
             ) : leaves.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center mt-10">{tr.leaves.empty}</p>
@@ -59,7 +59,7 @@ export default function LeavesPage() {
                             <Link
                                 key={leave.id}
                                 to={`/leaves/${leave.id}`}
-                                className="block bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 transition"
+                                className="block bg-surface rounded-xl border border-gray-200 p-4 hover:border-gray-300 transition"
                             >
                                 <div className="flex items-start justify-between mb-1">
                                     <span className="font-semibold text-sm text-gray-900">{leave.leave_type}</span>

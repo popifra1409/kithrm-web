@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
+import { fileUrl } from '../lib/fileUrl';
 
 const quickLinks = [
   { to: '/profile', key: 'career', icon: '🪪' },
@@ -51,11 +52,12 @@ function initialsOf(name: string): string {
 /** Une photo dont le fichier a disparu renvoie une erreur : on retombe sur les initiales. */
 function Avatar({ name, photo }: { name: string; photo: string | null }) {
   const [failed, setFailed] = useState(false);
+  const src = fileUrl(photo);
 
-  if (photo && !failed) {
+  if (src && !failed) {
     return (
       <img
-        src={photo}
+        src={src}
         alt=""
         onError={() => setFailed(true)}
         className="w-12 h-12 rounded-full object-cover shrink-0 bg-gray-100"
@@ -64,7 +66,7 @@ function Avatar({ name, photo }: { name: string; photo: string | null }) {
   }
 
   return (
-    <div className="w-12 h-12 rounded-full bg-[#1e3a5f] text-white flex items-center justify-center font-semibold shrink-0">
+    <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center font-semibold shrink-0">
       {initialsOf(name) || '?'}
     </div>
   );
@@ -84,11 +86,11 @@ export default function HomePage() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8">
-      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <section className="bg-surface rounded-2xl shadow-sm border border-gray-100 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-gray-500">{tr.home.greeting}</p>
-            <h1 className="text-xl font-bold text-[#1e3a5f] truncate">{displayName}</h1>
+            <h1 className="text-xl font-bold text-accent truncate">{displayName}</h1>
           </div>
           <Avatar name={displayName} photo={employee?.photo ?? null} />
         </div>
@@ -112,7 +114,7 @@ export default function HomePage() {
           <Link
             key={item.to}
             to={item.to}
-            className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col items-center gap-2 text-center transition hover:border-[#1e3a5f]/30 hover:shadow active:scale-[0.98]"
+            className="bg-surface rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col items-center gap-2 text-center transition hover:border-accent/30 hover:shadow active:scale-[0.98]"
           >
             <span className="text-2xl" aria-hidden>{item.icon}</span>
             <span className="text-sm font-semibold text-gray-800">{tr.home.quickLinks[item.key]}</span>
@@ -143,7 +145,7 @@ export default function HomePage() {
             <Link
               key={service.id}
               to={to}
-              className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 transition hover:border-[#1e3a5f]/30 hover:shadow active:scale-[0.98]"
+              className="bg-surface rounded-xl border border-gray-100 shadow-sm p-4 transition hover:border-accent/30 hover:shadow active:scale-[0.98]"
             >
               <span className="text-xl block" aria-hidden>{service.icon}</span>
               <span className="text-sm font-semibold text-gray-800">{copy.label}</span>
@@ -181,7 +183,7 @@ export default function HomePage() {
               href={`${ESPACE_PERSONNEL_URL}#${doc.id}`}
               target="_blank"
               rel="noreferrer"
-              className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-start gap-3 transition hover:border-[#1e3a5f]/30 hover:shadow"
+              className="bg-surface rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-start gap-3 transition hover:border-accent/30 hover:shadow"
             >
               <span className="text-xl shrink-0" aria-hidden>{doc.icon}</span>
               <span className="min-w-0">

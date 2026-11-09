@@ -1,0 +1,4 @@
+{
+    "_note": "Copié tel quel à la racine du dossier servi, à côté de index.html. Sur le serveur du réseau local, remplacer la valeur par \"/api\" : la page et l'API y partagent la même origine. Une valeur relative doit commencer par / (chemin complet de l'API) ; le « / » final est facultatif. Une valeur vide ou mal formée est ignorée, et l'adresse embarquée au build reprend la main.",
+    "apiBaseUrl": "https://api.hopitalgeneraldeyaounde.cm/api"
+}

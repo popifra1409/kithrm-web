@@ -18,8 +18,10 @@ import AddDependentPage from './pages/AddDependentPage';
 import DiplomasPage from './pages/DiplomasPage';
 import AddDiplomaPage from './pages/AddDiplomaPage';
 import CensusPage from './pages/CensusPage';
+import PreferencesPage from './pages/PreferencesPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ConnectionBanner from './components/ConnectionBanner';
+import PreferencesSync from './components/PreferencesSync';
 
 export default function App() {
   return (
@@ -28,6 +30,7 @@ export default function App() {
         <AppInfoProvider>
           <AuthProvider>
             <ConnectionBanner />
+            <PreferencesSync />
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/activate" element={<ActivatePage />} />
@@ -52,6 +55,7 @@ export default function App() {
                 <Route path="/diplomas" element={<DiplomasPage />} />
                 <Route path="/diplomas/new" element={<AddDiplomaPage />} />
                 <Route path="/census" element={<CensusPage />} />
+                <Route path="/preferences" element={<PreferencesPage />} />
               </Route>
 
               <Route path="*" element={<NotFoundPage />} />

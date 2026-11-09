@@ -7,6 +7,7 @@ import type { AccountDeletionReason } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
 import { extractApiError } from '../api/client';
+import { fileUrl } from '../lib/fileUrl';
 
 export default function ProfilePage() {
     const navigate = useNavigate();
@@ -163,7 +164,7 @@ export default function ProfilePage() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full p-10">
-                <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
@@ -177,16 +178,16 @@ export default function ProfilePage() {
             <div className="flex flex-col items-center mb-8">
                 <div className="relative">
                     {profile.photo_url ? (
-                        <img src={profile.photo_url} alt="" className="w-24 h-24 rounded-full object-cover" />
+                        <img src={fileUrl(profile.photo_url) ?? undefined} alt="" className="w-24 h-24 rounded-full object-cover" />
                     ) : (
-                        <div className="w-24 h-24 rounded-full bg-[#1e3a5f] flex items-center justify-center text-white text-3xl font-bold">
+                        <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-white text-3xl font-bold">
                             {profile.full_name.charAt(0)}
                         </div>
                     )}
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploadingPhoto}
-                        className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-[#1e3a5f] border-2 border-white flex items-center justify-center text-white text-xs hover:opacity-90"
+                        className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-primary border-2 border-white flex items-center justify-center text-white text-xs hover:opacity-90"
                         title={tr.profile.photoTitle}
                     >
                         {isUploadingPhoto ? '…' : '✏️'}
@@ -215,7 +216,7 @@ export default function ProfilePage() {
                 title={tr.profile.sections.contact}
                 action={
                     !isEditing && (
-                        <button onClick={() => setIsEditing(true)} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
+                        <button onClick={() => setIsEditing(true)} className="text-sm font-semibold text-accent hover:underline">
                             {tr.profile.edit}
                         </button>
                     )
@@ -247,7 +248,7 @@ export default function ProfilePage() {
                             <button
                                 onClick={handleSave}
                                 disabled={isSaving}
-                                className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                                className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                             >
                                 {isSaving ? tr.profile.saving : tr.profile.save}
                             </button>
@@ -272,7 +273,7 @@ export default function ProfilePage() {
                                 setIsChangingPassword(true);
                                 setPasswordSuccess(false);
                             }}
-                            className="text-sm font-semibold text-[#1e3a5f] hover:underline"
+                            className="text-sm font-semibold text-accent hover:underline"
                         >
                             {tr.profile.changePassword}
                         </button>
@@ -308,7 +309,7 @@ export default function ProfilePage() {
                             <button
                                 onClick={handleChangePassword}
                                 disabled={isSavingPassword}
-                                className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                                className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                             >
                                 {isSavingPassword ? tr.profile.saving : tr.profile.confirm}
                             </button>
@@ -336,7 +337,7 @@ export default function ProfilePage() {
 
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-xl p-6 w-full max-w-md">
+                    <div className="bg-surface rounded-xl p-6 w-full max-w-md">
                         <h3 className="font-bold text-red-700 mb-1">{tr.profile.deleteAccount}</h3>
                         <p className="text-sm text-gray-600 mb-4">{tr.profile.deleteWarning}</p>
 
@@ -412,9 +413,9 @@ export default function ProfilePage() {
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
     return (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <div className="bg-surface rounded-xl border border-gray-200 p-6 mb-6">
             <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-bold text-[#1e3a5f]">{title}</h2>
+                <h2 className="text-sm font-bold text-accent">{title}</h2>
                 {action}
             </div>
             {children}
@@ -450,7 +451,7 @@ function Field({
                 type={type}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
         </div>
     );

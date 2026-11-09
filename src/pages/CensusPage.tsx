@@ -10,6 +10,7 @@ import { extractApiError, isNetworkError } from '../api/client';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 import DateInput from '../components/DateInput';
 import { isoToFr } from '../lib/dates';
+import { fileUrl } from '../lib/fileUrl';
 import {
   DOCUMENT_EXTENSIONS,
   MAX_UPLOAD_BYTES,
@@ -546,7 +547,7 @@ export default function CensusPage() {
   if (isLoading) {
     return (
       <div className="flex justify-center p-10">
-        <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -556,11 +557,11 @@ export default function CensusPage() {
       return (
         <div className="max-w-md mx-auto p-8 text-center">
           <p className="text-4xl mb-3">📶</p>
-          <h1 className="text-lg font-bold text-[#1e3a5f]">{tr.census.screens.offlineTitle}</h1>
+          <h1 className="text-lg font-bold text-accent">{tr.census.screens.offlineTitle}</h1>
           <p className="text-sm text-gray-600 mt-2">{tr.census.screens.offlineText}</p>
           <button
             onClick={load}
-            className="mt-5 w-full bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
+            className="mt-5 w-full bg-primary text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
           >
             {tr.census.labels.retry}
           </button>
@@ -620,7 +621,7 @@ export default function CensusPage() {
 
     return (
       <div className="max-w-2xl mx-auto p-4 sm:p-8">
-        <h1 className="text-lg font-bold text-[#1e3a5f] mb-1">{tr.census.stages.review}</h1>
+        <h1 className="text-lg font-bold text-accent mb-1">{tr.census.stages.review}</h1>
         <p className="text-sm text-gray-500 mb-4">{tr.census.screens.reviewIntro}</p>
 
         {draft.photo && (
@@ -743,7 +744,7 @@ export default function CensusPage() {
           <button
             onClick={handleConfirmSubmit}
             disabled={isSubmitting || !online}
-            className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60"
+            className="flex-1 bg-primary text-white rounded-lg py-3 text-sm font-bold hover:opacity-90 disabled:opacity-60"
           >
             {isSubmitting ? tr.census.labels.sending : online ? tr.census.labels.confirmSubmit : tr.census.labels.offlineSubmit}
           </button>
@@ -760,7 +761,7 @@ export default function CensusPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-8">
-      <h1 className="text-lg font-bold text-[#1e3a5f]">{current.campaign.name}</h1>
+      <h1 className="text-lg font-bold text-accent">{current.campaign.name}</h1>
       {current.campaign.description && <p className="text-sm text-gray-500 mt-1 mb-4">{current.campaign.description}</p>}
 
       {wasRejected && (
@@ -776,7 +777,7 @@ export default function CensusPage() {
                     <button
                       type="button"
                       onClick={() => goTo(FIELD_STAGES[field.key] ?? 'identity')}
-                      className="text-[11px] font-semibold text-red-700 bg-white border border-red-200 rounded-full px-2.5 py-1 hover:bg-red-100"
+                      className="text-[11px] font-semibold text-red-700 bg-surface border border-red-200 rounded-full px-2.5 py-1 hover:bg-red-100"
                     >
                       {field.label}
                     </button>
@@ -798,8 +799,8 @@ export default function CensusPage() {
       )}
 
       {lockNoticeKind && (
-        <div className="bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-xl p-4 mb-4">
-          <p className="font-semibold text-sm text-[#1e3a5f]">{tr.censusLock.redirectedTitle}</p>
+        <div className="bg-primary/5 border border-accent/20 rounded-xl p-4 mb-4">
+          <p className="font-semibold text-sm text-accent">{tr.censusLock.redirectedTitle}</p>
           <p className="text-xs text-gray-600 mt-1">{tr.censusLock[lockNoticeKind]}</p>
         </div>
       )}
@@ -863,7 +864,7 @@ export default function CensusPage() {
         />
         {!draft.photo && current.current_data?.personal.photo_url && (
           <div className="mt-3 flex items-center gap-2">
-            <img src={current.current_data.personal.photo_url} alt="" className="w-12 h-12 rounded-full object-cover" />
+            <img src={fileUrl(current.current_data.personal.photo_url) ?? undefined} alt="" className="w-12 h-12 rounded-full object-cover" />
             <span className="text-xs text-gray-500">{tr.census.hints.currentPhoto}</span>
           </div>
         )}
@@ -1138,7 +1139,7 @@ export default function CensusPage() {
               key={b}
               onClick={() => setBranch(b)}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold border ${draft.organizational.branch_type === b
-                  ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                  ? 'bg-primary text-white border-accent'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
             >
@@ -1259,7 +1260,7 @@ export default function CensusPage() {
         showIf={stage === 'family'}
         flagged={flaggedFields.has('dependents')}
         action={
-          <button onClick={() => setEditingDependentIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
+          <button onClick={() => setEditingDependentIndex('new')} className="text-sm font-semibold text-accent hover:underline">
             {tr.diplomas.add}
           </button>
         }
@@ -1280,7 +1281,7 @@ export default function CensusPage() {
                 </div>
                 <div className="flex gap-3">
                   {!dep.removed && (
-                    <button onClick={() => setEditingDependentIndex(index)} className="text-xs font-semibold text-[#1e3a5f] hover:underline">
+                    <button onClick={() => setEditingDependentIndex(index)} className="text-xs font-semibold text-accent hover:underline">
                       {tr.census.labels.edit}
                     </button>
                   )}
@@ -1302,7 +1303,7 @@ export default function CensusPage() {
         showIf={stage === 'family'}
         flagged={flaggedFields.has('diplomas')}
         action={
-          <button onClick={() => setEditingDiplomaIndex('new')} className="text-sm font-semibold text-[#1e3a5f] hover:underline">
+          <button onClick={() => setEditingDiplomaIndex('new')} className="text-sm font-semibold text-accent hover:underline">
             {tr.diplomas.add}
           </button>
         }
@@ -1321,7 +1322,7 @@ export default function CensusPage() {
                 </div>
                 <div className="flex gap-3">
                   {!dip.removed && (
-                    <button onClick={() => setEditingDiplomaIndex(index)} className="text-xs font-semibold text-[#1e3a5f] hover:underline">
+                    <button onClick={() => setEditingDiplomaIndex(index)} className="text-xs font-semibold text-accent hover:underline">
                       {tr.census.labels.edit}
                     </button>
                   )}
@@ -1348,7 +1349,7 @@ export default function CensusPage() {
         </button>
         <button
           onClick={() => goTo(nextStage ? nextStage.key : 'review')}
-          className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
+          className="flex-1 bg-primary text-white rounded-lg py-3 text-sm font-bold hover:opacity-90"
         >
           {nextStage ? `${nextStage.label} →` : tr.census.labels.reviewCta}
         </button>
@@ -1394,13 +1395,13 @@ function Section({
 
   return (
     <div
-      className={`rounded-xl border p-5 mb-4 ${flagged ? 'border-red-300 bg-red-50/40' : 'bg-white border-gray-200'}`}
+      className={`rounded-xl border p-5 mb-4 ${flagged ? 'border-red-300 bg-red-50/40' : 'bg-surface border-gray-200'}`}
     >
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-sm font-bold text-[#1e3a5f] flex items-center gap-2">
+        <h2 className="text-sm font-bold text-accent flex items-center gap-2">
           {title}
           {flagged && (
-            <span className="text-[10px] font-bold text-red-700 bg-white border border-red-200 rounded-full px-2 py-0.5">
+            <span className="text-[10px] font-bold text-red-700 bg-surface border border-red-200 rounded-full px-2 py-0.5">
               {tr.census.labels.flaggedBadge}
             </span>
           )}
@@ -1434,7 +1435,7 @@ function StageNav({
   const currentIndex = stages.findIndex((s) => s.key === stage);
 
   return (
-    <nav className="bg-white rounded-xl border border-gray-200 p-2 mb-4">
+    <nav className="bg-surface rounded-xl border border-gray-200 p-2 mb-4">
       <ol className="flex items-stretch gap-1 overflow-x-auto">
         {stages.map((s, i) => {
           const isCurrent = s.key === stage;
@@ -1447,7 +1448,7 @@ function StageNav({
                 onClick={() => onPick(s.key)}
                 aria-current={isCurrent ? 'step' : undefined}
                 className={`w-full rounded-lg px-1.5 py-2 text-[11px] font-semibold leading-tight ${
-                  isCurrent ? 'bg-[#1e3a5f] text-white' : 'text-gray-600 hover:bg-gray-100'
+                  isCurrent ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100'
                 } ${isFlagged && !isCurrent ? 'border border-red-300' : ''}`}
               >
                 <span className={isCurrent ? 'text-white' : isFlagged ? 'text-red-600' : isDone ? 'text-green-600' : 'text-gray-400'}>
@@ -1474,9 +1475,9 @@ function RecapRow({ label, value }: { label: string; value: string }) {
 }
 
 const FIELD_CLASS =
-  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]';
+  'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary';
 const FLAGGED_CLASS =
-  'w-full rounded-lg border-2 border-red-500 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400';
+  'w-full rounded-lg border-2 border-red-500 bg-surface px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400';
 
 /** Rappel du motif du renvoi, posé sous chaque champ que les RH ont marqué. */
 function CorrectionNote() {
@@ -1544,8 +1545,8 @@ function SelectField({
         disabled={disabled}
         className={
           flagged
-            ? 'w-full rounded-lg border-2 border-red-500 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-400'
-            : `${FIELD_CLASS} bg-white disabled:bg-gray-100 disabled:text-gray-400`
+            ? 'w-full rounded-lg border-2 border-red-500 px-3 py-2 text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-red-400'
+            : `${FIELD_CLASS} bg-surface disabled:bg-gray-100 disabled:text-gray-400`
         }
       >
         <option value="">{disabled && hint ? hint : tr.census.labels.dash}</option>
@@ -1566,7 +1567,7 @@ function SelectField({
 function Modal({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+      <div className="bg-surface rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
         <h3 className="font-bold text-gray-900 mb-4">{title}</h3>
         {children}
       </div>
@@ -1632,7 +1633,7 @@ function DependentModal({
               <button
                 key={r}
                 onClick={() => setItem((p) => ({ ...p, relationship: r }))}
-                className={`px-2.5 py-1 rounded-full text-xs border ${item.relationship === r ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
+                className={`px-2.5 py-1 rounded-full text-xs border ${item.relationship === r ? 'bg-primary text-white border-accent' : 'border-gray-300 text-gray-700'}`}
               >
                 {tr.dependents.relationships[r]}
               </button>
@@ -1645,8 +1646,8 @@ function DependentModal({
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.dependents.genderField}</label>
           <div className="flex gap-2">
-            <button onClick={() => setItem((p) => ({ ...p, gender: 'M' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'M' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>{tr.dependents.male}</button>
-            <button onClick={() => setItem((p) => ({ ...p, gender: 'F' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'F' ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300'}`}>{tr.dependents.female}</button>
+            <button onClick={() => setItem((p) => ({ ...p, gender: 'M' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'M' ? 'bg-primary text-white border-accent' : 'border-gray-300'}`}>{tr.dependents.male}</button>
+            <button onClick={() => setItem((p) => ({ ...p, gender: 'F' }))} className={`px-2.5 py-1 rounded-full text-xs border ${item.gender === 'F' ? 'bg-primary text-white border-accent' : 'border-gray-300'}`}>{tr.dependents.female}</button>
           </div>
         </div>
 
@@ -1678,7 +1679,7 @@ function DependentModal({
 
         <div className="flex gap-3 pt-2">
           <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">{tr.census.labels.cancel}</button>
-          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
+          <button onClick={handleSave} className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
         </div>
       </div>
     </Modal>
@@ -1724,7 +1725,7 @@ function DiplomaModal({
               <button
                 key={t}
                 onClick={() => setItem((p) => ({ ...p, type: t }))}
-                className={`px-3 py-1.5 rounded-lg text-sm text-left border ${item.type === t ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]' : 'border-gray-300 text-gray-700'}`}
+                className={`px-3 py-1.5 rounded-lg text-sm text-left border ${item.type === t ? 'bg-primary text-white border-accent' : 'border-gray-300 text-gray-700'}`}
               >
                 {tr.diplomas.types[t]}
               </button>
@@ -1743,16 +1744,20 @@ function DiplomaModal({
 
         <div className="flex gap-3 pt-2">
           <button onClick={onCancel} className="flex-1 border border-gray-300 rounded-lg py-2 text-sm font-medium text-gray-700">{tr.census.labels.cancel}</button>
-          <button onClick={handleSave} className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
+          <button onClick={handleSave} className="flex-1 bg-primary text-white rounded-lg py-2 text-sm font-semibold">{tr.census.labels.save}</button>
         </div>
       </div>
     </Modal>
   );
 }
 
-function DocumentLink({ label, url }: { label: string; url: string }) {
+function DocumentLink({ label, url }: { label: string; url: string | null }) {
+  const href = fileUrl(url);
+
+  if (!href) return null;
+
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="block text-xs text-[#1e3a5f] hover:underline">
+    <a href={href} target="_blank" rel="noreferrer" className="block text-xs text-accent hover:underline">
       {label}
     </a>
   );
@@ -1800,7 +1805,7 @@ function FileField({
 
           onChange(picked);
         }}
-        className={`w-full text-xs ${flagged ? 'rounded-lg border-2 border-red-500 bg-white p-2' : ''}`}
+        className={`w-full text-xs ${flagged ? 'rounded-lg border-2 border-red-500 bg-surface p-2' : ''}`}
       />
       {file && file.size === 0 && <p className="text-xs text-red-700 mt-1">{tr.census.file.emptyPick(file.name)}</p>}
       {file && file.size > 0 && (

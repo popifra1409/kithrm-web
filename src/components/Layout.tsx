@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
-import LanguageSwitcher from './LanguageSwitcher';
+import { fileUrl } from '../lib/fileUrl';
 
 const SIDEBAR_COLLAPSED_KEY = 'kithrm_sidebar_collapsed';
 
@@ -13,6 +13,7 @@ const navItems = [
     { to: '/dependents', key: 'dependents', icon: '👨‍👩‍👧' },
     { to: '/diplomas', key: 'diplomas', icon: '🎓' },
     { to: '/census', key: 'census', icon: '📋' },
+    { to: '/preferences', key: 'preferences', icon: '⚙️' },
 ] as const;
 
 function ChevronToggle({ collapsed, onClick }: { collapsed: boolean; onClick: () => void }) {
@@ -46,6 +47,7 @@ export default function Layout() {
     const { tr } = useLang();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isCollapsed, setIsCollapsed] = useState(() => localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1');
+    const photoUrl = fileUrl(user?.employee?.photo);
 
     function toggleCollapsed() {
         const next = !isCollapsed;
@@ -61,8 +63,8 @@ export default function Layout() {
                 }`}
             >
                 <div className={`flex items-center gap-3 min-w-0 ${collapsed ? 'justify-center' : 'w-full'}`}>
-                    {user?.employee?.photo ? (
-                        <img src={user.employee.photo} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
+                    {photoUrl ? (
+                        <img src={photoUrl} alt="" className="w-10 h-10 rounded-full object-cover shrink-0" />
                     ) : (
                         <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center font-bold shrink-0">
                             {(user?.employee?.full_name ?? user?.name ?? '?').charAt(0)}
@@ -105,9 +107,6 @@ export default function Layout() {
             </nav>
 
             <div className="p-2 border-t border-white/10 flex flex-col gap-2">
-                <div className={collapsed ? 'flex justify-center' : 'flex'}>
-                    <LanguageSwitcher tone="dark" />
-                </div>
                 <button
                     onClick={logout}
                     title={tr.layout.logout}
@@ -126,10 +125,9 @@ export default function Layout() {
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
             {/* Barre du haut, visible uniquement sur mobile/tablette */}
-            <header className="md:hidden bg-[#1e3a5f] text-white flex items-center justify-between px-4 py-3 sticky top-0 z-30">
+            <header className="md:hidden bg-primary text-white flex items-center justify-between px-4 py-3 sticky top-0 z-30">
                 <span className="font-semibold text-sm">{tr.layout.brand}</span>
                 <div className="flex items-center gap-2">
-                    <LanguageSwitcher tone="dark" />
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
                         className="p-2 -mr-2"
@@ -146,7 +144,7 @@ export default function Layout() {
 
             {/* Barre latérale : repliable sur desktop, tiroir superposé sur mobile */}
             <aside
-                className={`hidden md:flex bg-[#1e3a5f] text-white flex-col shrink-0 transition-[width] duration-200 ${
+                className={`hidden md:flex bg-primary text-white flex-col shrink-0 transition-[width] duration-200 ${
                     isCollapsed ? 'w-[60px]' : 'w-64'
                 }`}
             >
@@ -155,7 +153,7 @@ export default function Layout() {
 
             {isMobileMenuOpen && (
                 <div className="md:hidden fixed inset-0 z-40 flex">
-                    <div className="w-72 max-w-[80vw] bg-[#1e3a5f] text-white flex flex-col h-full">
+                    <div className="w-72 max-w-[80vw] bg-primary text-white flex flex-col h-full">
                         <div className="flex justify-end p-3">
                             <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 text-white/80" aria-label={tr.layout.closeMenu}>
                                 ✕

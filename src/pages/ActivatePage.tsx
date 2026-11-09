@@ -7,6 +7,7 @@ import { useLang } from '../context/LangContext';
 import { startActivation, refreshActivationCaptcha, requestActivationReview } from '../api/auth';
 import type { ActivationCaptcha } from '../api/auth';
 import { extractApiError } from '../api/client';
+import { fileUrl } from '../lib/fileUrl';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import DateInput from '../components/DateInput';
 
@@ -273,23 +274,23 @@ export default function ActivatePage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+      <div className="w-full max-w-sm bg-surface rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
         <div className="flex justify-end mb-2">
           <LanguageSwitcher />
         </div>
 
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
-            <img src={appInfo.logo_url} alt="" className="w-14 h-14 mx-auto mb-3 object-contain" />
+            <img src={fileUrl(appInfo.logo_url) ?? undefined} alt="" className="w-14 h-14 mx-auto mb-3 object-contain" />
           ) : (
-            <div className="w-14 h-14 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
+            <div className="w-14 h-14 rounded-2xl bg-primary mx-auto flex items-center justify-center mb-3">
               <span className="text-white text-xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
             </div>
           )}
 
           {step === 'credentials' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.title}</h1>
+              <h1 className="text-xl font-bold text-accent">{tr.activate.title}</h1>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.intro}</p>
               <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">
                 {tr.activate.stepOf(1, 2)}
@@ -299,7 +300,7 @@ export default function ActivatePage() {
 
           {step === 'verification' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.verificationTitle}</h1>
+              <h1 className="text-xl font-bold text-accent">{tr.activate.verificationTitle}</h1>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.verificationIntro}</p>
               <p className="text-[11px] font-semibold text-gray-400 mt-3 uppercase tracking-wide">
                 {tr.activate.stepOf(2, 2)}
@@ -309,7 +310,7 @@ export default function ActivatePage() {
 
           {step === 'review_requested' && (
             <>
-              <h1 className="text-xl font-bold text-[#1e3a5f]">{tr.activate.reviewTitle}</h1>
+              <h1 className="text-xl font-bold text-accent">{tr.activate.reviewTitle}</h1>
               <p className="text-xs text-gray-500 mt-2 leading-relaxed">{tr.activate.reviewIntro}</p>
             </>
           )}
@@ -354,7 +355,7 @@ export default function ActivatePage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
               {isSubmitting ? tr.activate.checking : tr.activate.continue}
             </button>
@@ -378,7 +379,7 @@ export default function ActivatePage() {
                 value={recruitmentDate}
                 onChange={setRecruitmentDate}
                 labelClassName="block text-sm font-medium text-gray-700 mb-1"
-                inputClassName="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                inputClassName="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             ) : (
               <div>
@@ -389,7 +390,7 @@ export default function ActivatePage() {
                   id="declared-year"
                   value={declaredYear}
                   onChange={(e) => setDeclaredYear(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-surface focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 >
                   <option value="">{tr.activate.chooseYear}</option>
                   {yearOptions().map((year) => (
@@ -405,14 +406,14 @@ export default function ActivatePage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{tr.common.captchaLabel}</label>
               <div className="flex items-center gap-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 mb-2">
-                <span className="flex-1 text-center text-lg font-bold text-[#1e3a5f] tracking-wide select-none">
+                <span className="flex-1 text-center text-lg font-bold text-accent tracking-wide select-none">
                   {session.captcha.question}
                 </span>
                 <button
                   type="button"
                   onClick={handleRefreshCaptcha}
                   disabled={isRefreshing || isSubmitting}
-                  className="text-xs font-semibold text-[#1e3a5f] hover:underline disabled:opacity-50"
+                  className="text-xs font-semibold text-accent hover:underline disabled:opacity-50"
                   title={tr.common.captchaRefreshTitle}
                 >
                   {isRefreshing ? '…' : tr.common.captchaRefresh}
@@ -425,7 +426,7 @@ export default function ActivatePage() {
                 onChange={(e) => setCaptchaAnswer(e.target.value)}
                 placeholder={tr.common.answerPlaceholder}
                 autoComplete="off"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             </div>
 
@@ -437,7 +438,7 @@ export default function ActivatePage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
               {isSubmitting ? tr.activate.activating : tr.activate.confirm}
             </button>
@@ -457,7 +458,7 @@ export default function ActivatePage() {
                 type="button"
                 onClick={handleRequestReview}
                 disabled={isSubmitting}
-                className="w-full rounded-lg border border-[#1e3a5f] text-[#1e3a5f] py-2.5 text-sm font-semibold hover:bg-blue-50 transition disabled:opacity-60"
+                className="w-full rounded-lg border border-accent text-accent py-2.5 text-sm font-semibold hover:bg-blue-50 transition disabled:opacity-60"
               >
                 {isSubmitting ? tr.common.submitting : tr.activate.requestReview}
               </button>
@@ -469,7 +470,7 @@ export default function ActivatePage() {
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
               <p className="text-xs uppercase tracking-wide text-gray-500">{tr.common.referenceLabel}</p>
-              <p className="text-2xl font-bold text-[#1e3a5f] mt-1 select-all">{reviewReference}</p>
+              <p className="text-2xl font-bold text-accent mt-1 select-all">{reviewReference}</p>
             </div>
 
             <ol className="text-sm text-gray-700 space-y-2 list-decimal pl-5">
@@ -485,7 +486,7 @@ export default function ActivatePage() {
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
             >
               {tr.common.goToLogin}
             </button>
@@ -493,7 +494,7 @@ export default function ActivatePage() {
         )}
 
         <div className="text-center mt-5">
-          <Link to="/login" className="text-sm font-medium text-[#1e3a5f] hover:underline">
+          <Link to="/login" className="text-sm font-medium text-accent hover:underline">
             {tr.activate.alreadyActivated}
           </Link>
         </div>
@@ -518,8 +519,8 @@ function ModeButton({
       aria-pressed={active}
       className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
         active
-          ? 'border-[#1e3a5f] bg-[#1e3a5f] text-white'
-          : 'border-gray-300 bg-white text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f]'
+          ? 'border-accent bg-primary text-white'
+          : 'border-gray-300 bg-surface text-gray-600 hover:border-accent hover:text-accent'
       }`}
     >
       {children}
@@ -553,7 +554,7 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
       />
       {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
     </div>

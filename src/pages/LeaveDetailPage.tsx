@@ -31,7 +31,7 @@ export default function LeaveDetailPage() {
     if (isLoading) {
         return (
             <div className="flex justify-center p-10">
-                <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
@@ -42,8 +42,8 @@ export default function LeaveDetailPage() {
 
     return (
         <div className="max-w-2xl mx-auto p-4 sm:p-8">
-            <div className="bg-white rounded-xl border border-gray-200 p-6 mb-4">
-                <h1 className="text-lg font-bold text-[#1e3a5f]">{leave.leave_type}</h1>
+            <div className="bg-surface rounded-xl border border-gray-200 p-6 mb-4">
+                <h1 className="text-lg font-bold text-accent">{leave.leave_type}</h1>
                 <p className="text-sm text-gray-700 mt-1">
                     {tr.leaves.range(isoToFr(leave.start_date), isoToFr(leave.end_date))} ({tr.leaves.daysLong(leave.total_days)})
                 </p>
@@ -77,8 +77,8 @@ export default function LeaveDetailPage() {
                 </div>
             )}
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <h2 className="text-sm font-bold text-[#1e3a5f] mb-4">{tr.leaves.circuitTitle}</h2>
+            <div className="bg-surface rounded-xl border border-gray-200 p-6">
+                <h2 className="text-sm font-bold text-accent mb-4">{tr.leaves.circuitTitle}</h2>
                 {leave.steps.map((step, index) => (
                     <StepRow key={step.order} step={step} isLast={index === leave.steps.length - 1} />
                 ))}

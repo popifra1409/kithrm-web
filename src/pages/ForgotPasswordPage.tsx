@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAppInfo } from '../context/AppInfoContext';
 import { useLang } from '../context/LangContext';
 import { extractApiError } from '../api/client';
+import { fileUrl } from '../lib/fileUrl';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import {
   fetchForgotPasswordCaptcha,
@@ -110,23 +111,23 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+      <div className="w-full max-w-sm bg-surface rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
         <div className="flex justify-end mb-2">
           <LanguageSwitcher />
         </div>
 
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
-            <img src={appInfo.logo_url} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
+            <img src={fileUrl(appInfo.logo_url) ?? undefined} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
           ) : (
-            <div className="w-16 h-16 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
+            <div className="w-16 h-16 rounded-2xl bg-primary mx-auto flex items-center justify-center mb-3">
               <span className="text-white text-2xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
             </div>
           )}
           {appInfo?.hospital_name && (
             <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
           )}
-          <h1 className="text-2xl font-bold text-[#1e3a5f]">{tr.forgot.title}</h1>
+          <h1 className="text-2xl font-bold text-accent">{tr.forgot.title}</h1>
           <p className="text-sm text-gray-500 mt-1">{tr.forgot.intro}</p>
         </div>
 
@@ -147,7 +148,7 @@ export default function ForgotPasswordPage() {
                 autoCapitalize="characters"
                 autoComplete="username"
                 autoFocus
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">{tr.forgot.matriculeHint}</p>
             </div>
@@ -158,7 +159,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
               {isSubmitting ? tr.forgot.preparing : tr.forgot.continue}
             </button>
@@ -175,14 +176,14 @@ export default function ForgotPasswordPage() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{tr.common.captchaLabel}</label>
               <div className="flex items-center gap-3 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2.5 mb-2">
-                <span className="flex-1 text-center text-lg font-bold text-[#1e3a5f] tracking-wide select-none">
+                <span className="flex-1 text-center text-lg font-bold text-accent tracking-wide select-none">
                   {captcha.question}
                 </span>
                 <button
                   type="button"
                   onClick={handleRefreshCaptcha}
                   disabled={isRefreshing || isSubmitting}
-                  className="text-xs font-semibold text-[#1e3a5f] hover:underline disabled:opacity-50"
+                  className="text-xs font-semibold text-accent hover:underline disabled:opacity-50"
                   title={tr.common.captchaRefreshTitle}
                 >
                   {isRefreshing ? '…' : tr.common.captchaRefresh}
@@ -195,7 +196,7 @@ export default function ForgotPasswordPage() {
                 onChange={(e) => setCaptchaAnswer(e.target.value)}
                 placeholder={tr.common.answerPlaceholder}
                 autoComplete="off"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               />
             </div>
 
@@ -204,7 +205,7 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
             >
               {isSubmitting ? tr.common.submitting : tr.forgot.submit}
             </button>
@@ -229,7 +230,7 @@ export default function ForgotPasswordPage() {
           <div className="space-y-4">
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-center">
               <p className="text-xs uppercase tracking-wide text-gray-500">{tr.common.referenceLabel}</p>
-              <p className="text-2xl font-bold text-[#1e3a5f] mt-1 select-all">{reference}</p>
+              <p className="text-2xl font-bold text-accent mt-1 select-all">{reference}</p>
               {validityLabel && <p className="text-xs text-gray-500 mt-2">{tr.forgot.validUntil(validityLabel)}</p>}
             </div>
 
@@ -247,7 +248,7 @@ export default function ForgotPasswordPage() {
             <button
               type="button"
               onClick={() => navigate('/login')}
-              className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
+              className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition"
             >
               {tr.forgot.goToLogin}
             </button>
@@ -255,13 +256,13 @@ export default function ForgotPasswordPage() {
         )}
 
         <div className="text-center mt-5 space-y-2">
-          <p className="text-sm font-medium text-[#1e3a5f]">
+          <p className="text-sm font-medium text-accent">
             <Link to="/login" className="hover:underline">{tr.forgot.backToLogin}</Link>
           </p>
           {step !== 'requested' && (
             <p className="text-xs text-gray-500">
               {tr.forgot.neverOpened}{' '}
-              <Link to="/activate" className="font-medium text-[#1e3a5f] hover:underline">
+              <Link to="/activate" className="font-medium text-accent hover:underline">
                 {tr.forgot.activateLink}
               </Link>
             </p>

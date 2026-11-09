@@ -82,7 +82,7 @@ export default function PhotoCaptureInput({ label, file, onChange, required, hin
                         <button
                             type="button"
                             onClick={capturePhoto}
-                            className="flex-1 bg-[#1e3a5f] text-white rounded-lg py-2 text-xs font-semibold"
+                            className="flex-1 bg-primary text-white rounded-lg py-2 text-xs font-semibold"
                         >
                             {tr.photo.capture}
                         </button>

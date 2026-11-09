@@ -5,6 +5,7 @@ import { useAppInfo } from '../context/AppInfoContext';
 import { useLang } from '../context/LangContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import { extractApiError } from '../api/client';
+import { fileUrl } from '../lib/fileUrl';
 import {
   LOGIN_HELP_AFTER_ATTEMPTS,
   LOGIN_LOCK_MINUTES,
@@ -72,22 +73,22 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-sm bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
+      <div className="w-full max-w-sm bg-surface rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
         <div className="flex justify-end mb-2">
           <LanguageSwitcher />
         </div>
         <div className="text-center mb-6">
           {appInfo?.logo_url ? (
-            <img src={appInfo.logo_url} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
+            <img src={fileUrl(appInfo.logo_url) ?? undefined} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
           ) : (
-            <div className="w-16 h-16 rounded-2xl bg-[#1e3a5f] mx-auto flex items-center justify-center mb-3">
+            <div className="w-16 h-16 rounded-2xl bg-primary mx-auto flex items-center justify-center mb-3">
               <span className="text-white text-2xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
             </div>
           )}
           {appInfo?.hospital_name && (
             <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
           )}
-          <h1 className="text-2xl font-bold text-[#1e3a5f]">{tr.login.title}</h1>
+          <h1 className="text-2xl font-bold text-accent">{tr.login.title}</h1>
           <p className="text-sm text-gray-500 mt-1">{tr.login.subtitle}</p>
         </div>
 
@@ -102,7 +103,7 @@ export default function LoginPage() {
               placeholder={tr.login.matriculePlaceholder}
               autoCapitalize="characters"
               autoComplete="username"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 
@@ -114,7 +115,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               autoComplete="current-password"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f] focus:border-transparent"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 
@@ -147,7 +148,7 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setHelpDismissed(false)}
-              className="w-full text-center text-xs font-semibold text-[#1e3a5f] hover:underline"
+              className="w-full text-center text-xs font-semibold text-accent hover:underline"
             >
               {tr.login.showHelp}
             </button>
@@ -156,7 +157,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
+            className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
           >
             {isSubmitting ? tr.login.submitting : tr.login.submit}
           </button>
@@ -168,15 +169,15 @@ export default function LoginPage() {
             propose déjà, on ne l'affiche donc pas deux fois. */}
         {!showHelp && (
           <div className="text-center mt-5">
-            <Link to="/activate" className="text-sm font-medium text-[#1e3a5f] hover:underline">
+            <Link to="/activate" className="text-sm font-medium text-accent hover:underline">
               {tr.login.firstConnectionLink}
             </Link>
           </div>
         )}
 
         {showHelp && (
-          <div className="mt-5 rounded-lg border border-[#1e3a5f]/25 bg-[#1e3a5f]/5 p-4">
-            <p className="text-sm font-semibold text-[#1e3a5f]">{tr.login.helpTitle}</p>
+          <div className="mt-5 rounded-lg border border-accent/25 bg-primary/5 p-4">
+            <p className="text-sm font-semibold text-accent">{tr.login.helpTitle}</p>
             <p className="text-xs text-gray-600 mt-1 leading-relaxed">
               {needsActivation
                 ? tr.login.helpNeedsActivation
@@ -188,14 +189,14 @@ export default function LoginPage() {
             <div className="mt-3 space-y-2">
               <Link
                 to="/activate"
-                className="flex items-center justify-between rounded-lg border border-[#1e3a5f] bg-white px-4 py-2.5 text-sm font-semibold text-[#1e3a5f] hover:bg-[#1e3a5f] hover:text-white transition"
+                className="flex items-center justify-between rounded-lg border border-accent bg-surface px-4 py-2.5 text-sm font-semibold text-accent hover:bg-primary hover:text-white transition"
               >
                 <span>{tr.login.activateLink}</span>
                 <span className="text-xs font-normal opacity-70">{tr.login.activateTag}</span>
               </Link>
               <Link
                 to="/forgot-password"
-                className="flex items-center justify-between rounded-lg border border-[#1e3a5f] bg-white px-4 py-2.5 text-sm font-semibold text-[#1e3a5f] hover:bg-[#1e3a5f] hover:text-white transition"
+                className="flex items-center justify-between rounded-lg border border-accent bg-surface px-4 py-2.5 text-sm font-semibold text-accent hover:bg-primary hover:text-white transition"
               >
                 <span>{tr.login.forgotLink}</span>
                 <span className="text-xs font-normal opacity-70">{tr.login.forgotTag}</span>
@@ -204,7 +205,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setHelpDismissed(true)}
-                  className="w-full rounded-lg px-4 py-2 text-sm text-gray-600 hover:text-[#1e3a5f] underline underline-offset-2"
+                  className="w-full rounded-lg px-4 py-2 text-sm text-gray-600 hover:text-accent underline underline-offset-2"
                 >
                   {tr.login.keepTrying(denial?.attemptsLeft ?? MAX_LOGIN_ATTEMPTS)}
                 </button>

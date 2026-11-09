@@ -31,6 +31,7 @@ export const en: Dict = {
             dependents: 'Dependents',
             diplomas: 'Diplomas',
             census: 'Recensement',
+            preferences: 'Preferences',
         },
     },
     login: {
@@ -104,7 +105,16 @@ export const en: Dict = {
     connection: {
         serverUnreachable: 'The HR server cannot be reached',
         serverUnreachableDetail:
-            'Your network is working, but the server is not answering. Try again in a moment.',
+            'Your network is working, but the server did not answer. Try again in a moment.',
+        originBlocked: 'The server answers, but your browser refuses to read its replies',
+        originBlockedDetail:
+            'This page’s address is not on the list of addresses the HR server accepts. It is not your connection: tell the HR department.',
+        mixedContent: 'This page is secure, the HR server is not',
+        mixedContentDetail:
+            'A browser cannot call an “http” address from a secure page. On site, open the local server address directly, for example http://116.72.30.12:8084.',
+        serverAnswers: 'The HR server is returning an error',
+        serverAnswersDetail:
+            'Your address is right and the server is answering, but it reports an error on its side. Try again in a moment; if it lasts, tell the HR department.',
         internetLost: 'Internet connection lost',
         internetLostDetail: 'Check this device’s Wi-Fi or mobile data.',
         draftKept: 'Anything you have already entered stays saved on this device.',
@@ -120,8 +130,9 @@ export const en: Dict = {
     },
     api: {
         generic: 'An error occurred.',
-        timeout: 'The request timed out. Check your connection.',
-        unreachable: 'The server cannot be reached. Check your internet connection.',
+        timeout: 'The request timed out before any reply. Try again in a moment.',
+        unreachable:
+            'The HR server did not answer. The banner at the top of the page explains why.',
         unexpected: 'An unexpected error occurred.',
     },
     uploads: {
@@ -653,6 +664,110 @@ export const en: Dict = {
             passwordShort: 'The new password must be at least 8 characters.',
             confirmWord: (word: string) => `Please type ${word} to confirm.`,
             passwordRequired: 'Please enter your password.',
+        },
+    },
+    preferences: {
+        title: 'Preferences',
+        intro:
+            'They apply right away, with no button to confirm them. Language, appearance and font follow your account on your other devices; the server address stays set on the one you are using, because it depends on the network you are connected to.',
+        storageRefused:
+            'Applied now, but it will not be there next time you open the portal and it will not follow your account either: this browser refuses to save preferences (private browsing, privacy extension).',
+        theme: {
+            section: 'Appearance',
+            label: 'Theme',
+            hint:
+                '“System” follows your device setting, including when it changes while you are using the portal. Only the backgrounds go dark: the layout and the colour of every button stay the same.',
+            options: {
+                light: 'Light',
+                dark: 'Dark',
+                system: 'System',
+            },
+        },
+        font: {
+            section: 'Font',
+            sizeLabel: 'Text size',
+            sizeHint: 'The whole interface follows, buttons and tables included, not the text alone.',
+            sizeOptions: {
+                sm: 'Small',
+                md: 'Normal',
+                lg: 'Large',
+            },
+            familyLabel: 'Font style',
+            familyHint:
+                'These fonts are already installed on your computer or phone: nothing is downloaded, so the portal stays readable without an Internet connection.',
+            familyOptions: {
+                system: 'Standard',
+                arial: 'Arial',
+                verdana: 'Verdana',
+                georgia: 'Georgia',
+            },
+        },
+        sync: {
+            section: 'Account and devices',
+            states: {
+                reading: 'Reading your account…',
+                queued: 'Your settings just changed: saving them in a moment.',
+                writing: 'Saving to your account…',
+                syncedJustNow: 'Your settings are saved on your account: they will follow you to any device you sign in to.',
+                syncedAligned: 'Nothing to save: this device and your account hold exactly the same settings.',
+                lastExchangeAt: (time: string) => `Last exchange with the account at ${time}.`,
+                offline:
+                    'The server did not answer: your settings stay applied on this device, and your account keeps its previous copy. Try again once the connection is back.',
+                noRoute:
+                    'The API server reached here does not know account settings yet: this portal is newer than the server. Your settings work on this device, but they will not follow you elsewhere until the server is updated — please tell the HR department.',
+                refused: (status: number) =>
+                    `The server refused the save (code ${status}): your account keeps its previous copy. This browser and that server probably are not on the same version.`,
+            },
+            retry: 'Sync now',
+            retryHint: 'Reads the account again and sends what it still misses, without reloading the page.',
+            note:
+                'These follow your account: language, appearance and font. This one stays on the device you set it on: the server address, because it depends on the network you are connected to.',
+        },
+        language: {
+            section: 'Language',
+            hint:
+                'This is the setting the whole portal follows; the sign-in and activation screens keep their own FR / EN buttons, because they come before anyone knows who you are.',
+        },
+        server: {
+            section: 'Server',
+            currentLabel: 'Address in use',
+            currentHint: (origin: string) => `Chosen by ${origin}.`,
+            origins: {
+                override: 'your setting in this browser',
+                config: 'the configuration file placed on the server',
+                build: 'the address built into the installed version',
+            },
+            sameOrigin: 'same origin as this page',
+            testButton: 'Test the connection',
+            testAgainButton: 'Test again',
+            testing: 'Testing…',
+            ok: (ms: number, name: string) => `✅ Server reached in ${ms} ms: ${name}.`,
+            okNoName: (ms: number) => `✅ Server reached in ${ms} ms.`,
+            http: (status: number) =>
+                `⚠️ An answer did come back, but the server returns HTTP error ${status}. This may be the website address rather than the API address, which normally ends with “/api”.`,
+            timeout: (seconds: number) =>
+                `⏱️ No answer after ${seconds} seconds. The server is not answering, or takes longer than this limit.`,
+            opaque:
+                '⚠️ The server did answer, but the browser refuses to let this page read the answer: this website address is not in the list of sites the API allows (a server setting).',
+            unreachable:
+                '❌ This address did not answer, or the browser blocked the request before sending it. The two look the same from the page: check the address you typed, then your access to the network.',
+            mixedContent:
+                '🚫 The browser cannot test this address: this page is served over a secure connection (https), and a local http server cannot be called from a secure page.',
+            mixedContentHowTo:
+                'Inside the hospital, open the local server address directly in the browser (for example http://116.72.30.12:8084). The page and the API then come from the same origin: calls are no longer blocked, and this setting becomes unnecessary.',
+            overrideTitle: 'Address to use from this browser',
+            overrideHint:
+                'Meant for the hospital local network, or for troubleshooting. While this field is empty, the address provided by the server applies.',
+            overridePlaceholder: 'Example: http://116.72.30.12:8084/api',
+            save: 'Save',
+            clear: 'Back to the server address',
+            saved: 'Address saved for this browser. It applies from the next call, without signing you out.',
+            cleared: 'Your setting was removed: the server address applies again.',
+            invalidAddress:
+                'Incomplete address: give the server with “http://” or “https://”, or a path starting with “/”, for example “/api”.',
+            emptyAddress: 'Type an address, or choose “Back to the server address”.',
+            notStoredAddress:
+                'Address applied right away, but this browser refuses to save it: it will be forgotten next time you open the portal.',
         },
     },
 };

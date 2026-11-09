@@ -118,7 +118,7 @@ export default function NewLeaveRequestPage() {
     if (isLoadingTypes) {
         return (
             <div className="flex justify-center p-10">
-                <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             </div>
         );
     }
@@ -127,7 +127,7 @@ export default function NewLeaveRequestPage() {
         <div className="max-w-2xl mx-auto p-4 sm:p-8">
             <h1 className="text-lg font-bold text-gray-900 mb-6">{tr.leaves.heading}</h1>
 
-            <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+            <form onSubmit={handleSubmit} className="bg-surface rounded-xl border border-gray-200 p-6 space-y-5">
                 <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">{tr.leaves.typeField}</label>
                     <div className="flex flex-wrap gap-2">
@@ -137,7 +137,7 @@ export default function NewLeaveRequestPage() {
                                 key={t.id}
                                 onClick={() => setSelectedTypeId(t.id)}
                                 className={`px-3 py-1.5 rounded-full text-sm border ${selectedTypeId === t.id
-                                        ? 'bg-[#1e3a5f] text-white border-[#1e3a5f]'
+                                        ? 'bg-primary text-white border-accent'
                                         : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                                     }`}
                             >
@@ -198,7 +198,7 @@ export default function NewLeaveRequestPage() {
                         value={reason}
                         onChange={(e) => setReason(e.target.value)}
                         rows={3}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                 </div>
 
@@ -224,7 +224,7 @@ export default function NewLeaveRequestPage() {
                 <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="w-full bg-[#1e3a5f] text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                    className="w-full bg-primary text-white rounded-lg py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-60"
                 >
                     {isSubmitting ? tr.common.sending : tr.leaves.submit}
                 </button>
@@ -254,7 +254,7 @@ function Field({
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
         </div>
     );

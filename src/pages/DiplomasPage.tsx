@@ -54,14 +54,14 @@ export default function DiplomasPage() {
                     (census.locked ? (
                         <Link
                             to="/census"
-                            className="bg-white border border-[#1e3a5f] text-[#1e3a5f] rounded-lg px-4 py-2 text-sm font-semibold hover:bg-[#1e3a5f] hover:text-white transition"
+                            className="bg-surface border border-accent text-accent rounded-lg px-4 py-2 text-sm font-semibold hover:bg-primary hover:text-white transition"
                         >
                             {tr.censusLock.cta}
                         </Link>
                     ) : (
                         <Link
                             to="/diplomas/new"
-                            className="bg-[#1e3a5f] text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
+                            className="bg-primary text-white rounded-lg px-4 py-2 text-sm font-semibold hover:opacity-90"
                         >
                             {tr.diplomas.add}
                         </Link>
@@ -69,26 +69,26 @@ export default function DiplomasPage() {
             </div>
 
             {census.locked && (
-                <p className="text-xs text-[#1e3a5f] bg-[#1e3a5f]/5 border border-[#1e3a5f]/20 rounded-lg p-3 mb-4">
+                <p className="text-xs text-accent bg-primary/5 border border-accent/20 rounded-lg p-3 mb-4">
                     {tr.censusLock.diploma}
                 </p>
             )}
 
             {isLoading ? (
                 <div className="flex justify-center p-10">
-                    <div className="w-8 h-8 border-2 border-[#1e3a5f] border-t-transparent rounded-full animate-spin" />
+                    <div className="w-8 h-8 border-2 border-accent border-t-transparent rounded-full animate-spin" />
                 </div>
             ) : diplomas.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center mt-10">{tr.diplomas.empty}</p>
             ) : (
                 <div className="space-y-3">
                     {diplomas.map((dip) => (
-                        <div key={dip.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                        <div key={dip.id} className="bg-surface rounded-xl border border-gray-200 p-4">
                             <div className="flex items-start justify-between mb-1">
                                 <span className="font-semibold text-sm text-gray-900">{dip.title}</span>
                                 <StatusBadge status={dip.validation_status} label={dip.validation_status_label} />
                             </div>
-                            <p className="text-xs font-semibold text-[#1e3a5f]">{dip.type_label}</p>
+                            <p className="text-xs font-semibold text-accent">{dip.type_label}</p>
                             <p className="text-sm text-gray-600">{dip.institution} · {dip.year_obtained}</p>
                             {dip.validation_status === 'rejected' && dip.rejection_reason && (
                                 <p className="text-xs text-red-600 mt-1">{tr.common.reason(dip.rejection_reason)}</p>
