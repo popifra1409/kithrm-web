@@ -4,8 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import { useAppInfo } from '../context/AppInfoContext';
 import { useLang } from '../context/LangContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import StructureLogo from '../components/StructureLogo';
 import { extractApiError } from '../api/client';
-import { fileUrl } from '../lib/fileUrl';
 import {
   LOGIN_HELP_AFTER_ATTEMPTS,
   LOGIN_LOCK_MINUTES,
@@ -78,13 +78,7 @@ export default function LoginPage() {
           <LanguageSwitcher />
         </div>
         <div className="text-center mb-6">
-          {appInfo?.logo_url ? (
-            <img src={fileUrl(appInfo.logo_url) ?? undefined} alt="" className="w-16 h-16 mx-auto mb-3 object-contain" />
-          ) : (
-            <div className="w-16 h-16 rounded-2xl bg-primary mx-auto flex items-center justify-center mb-3">
-              <span className="text-white text-2xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
-            </div>
-          )}
+          <StructureLogo logoUrl={appInfo?.logo_url} shortName={appInfo?.hospital_short_name} />
           {appInfo?.hospital_name && (
             <p className="text-xs font-semibold text-gray-600 mb-2">{appInfo.hospital_name}</p>
           )}

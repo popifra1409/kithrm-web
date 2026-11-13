@@ -13,13 +13,25 @@ import { isoToFr } from '../lib/dates';
 import { fileUrl } from '../lib/fileUrl';
 import {
   DOCUMENT_EXTENSIONS,
+  MAX_TOTAL_UPLOAD_BYTES,
   MAX_UPLOAD_BYTES,
   PHOTO_EXTENSIONS,
   fileSizeLabel,
+  totalBytes,
   uploadHint,
   uploadRefusal,
 } from '../lib/uploads';
 import { computeCascade } from '../lib/organization';
+import {
+  CONTRACT_SPECS,
+  DEPENDENT_SPECS,
+  DIPLOMA_SPECS,
+  PERSONAL_SPECS,
+  normalizeCount,
+  problemsOf,
+  specProblem,
+} from '../lib/fieldRules';
+import type { Spec } from '../lib/fieldRules';
 import { clearCensusDraft, loadCensusDraft, saveCensusDraft } from '../lib/censusDraftStore';
 import type { DraftStage } from '../lib/censusDraftStore';
 import { useConnection } from '../lib/connection';
@@ -67,6 +79,50 @@ const PARENT_RELATIONS = ['father', 'mother'];
  */
 function isAttached(file?: File | null): boolean {
   return !!file && file.size > 0;
+}
+
+/**
+ * Les pièces qui partent réellement dans la requête (les lignes supprimées en restent
+ * hors). C'est leur poids que le serveur ne sait pas lire : au-delà de `post_max_size` il
+ * ne reçoit plus rien du tout, au-delà d'`upload_max_filesize` il reçoit le formulaire
+ * sans la pièce. Le formulaire est arrivé, une réponse est revenue, et l'employé n'y
+ * comprend rien — d'où ces contrôles avant l'envoi plutôt qu'après.
+ */
+function attachedFiles(draft: CensusDraft): File[] {
+  const files: File[] = [];
+  if (isAttached(draft.photo)) files.push(draft.photo as File);
+  if (isAttached(draft.contract.contract_document)) files.push(draft.contract.contract_document as File);
+  if (isAttached(draft.contract.service_start_document)) files.push(draft.contract.service_start_document as File);
+
+  for (const d of draft.dependents) {
+    if (d.removed) continue;
+    for (const f of Object.values(d.documents)) if (isAttached(f)) files.push(f as File);
+  }
+  for (const di of draft.diplomas) {
+    if (!di.removed && isAttached(di.document)) files.push(di.document as File);
+  }
+
+  return files;
+}
+
+/**
+ * Ce que l'envoi ne peut pas transporter : une pièce au-dessus de la limite, ou l'ensemble
+ * au-dessus du corps que le serveur lit dans une requête. La vérification se refait à
+ * l'envoi parce qu'un brouillon relevé après une fermeture d'onglet peut porter un fichier
+ * choisi à l'époque où l'écran en promettait un plus gros — le contrôle au choix, alors,
+ * n'avait rien à refuser.
+ */
+function unsendableFiles(files: File[]): boolean {
+  return files.some((f) => f.size > MAX_UPLOAD_BYTES) || totalBytes(files) > MAX_TOTAL_UPLOAD_BYTES;
+}
+
+/** Les deux pièces les plus lourdes, nommées : ce sont elles que l'employé doit reprendre. */
+function heaviestLabel(files: File[], tr: Dict): string {
+  return [...files]
+    .sort((a, b) => b.size - a.size)
+    .slice(0, 2)
+    .map((f) => `${f.name} (${fileSizeLabel(f.size, tr.uploads.units)})`)
+    .join(', ');
 }
 
 /** L'ayant droit tel que l'employé le lit sur sa ligne, pour nommer la pièce manquante. */
@@ -204,6 +260,10 @@ export default function CensusPage() {
   // Refus du serveur à la soumission : les champs fautifs, tels qu'il les nomme.
   const [refusedProblems, setRefusedProblems] = useState<string[]>([]);
   const [refusedFields, setRefusedFields] = useState<string[]>([]);
+  // Contrôle à la saisie : un champ n'est repris qu'une fois quitté (ou signalé par les
+  // RH). Reprendre « 01 » pendant la frappe masquerait ce que l'agent est en train
+  // d'écrire ; le taire jusqu'à l'envoi, c'est le refus qu'il subit aujourd'hui.
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
 
   // Brouillon tel que renvoyé par le serveur : sert à savoir si l'agent a vraiment modifié quelque chose.
   const pristineRef = useRef<CensusDraft | null>(null);
@@ -369,6 +429,59 @@ export default function CensusPage() {
     setDraft((d) => (d ? { ...d, personal: { ...d.personal, [field]: value } } : d));
   }
 
+  const markTouched = (key: string) => setTouched((t) => ({ ...t, [key]: true }));
+
+  /** Tout reprendre d'un coup : c'est ce que le récapitulatif promet avant l'envoi. */
+  const revealAll = () =>
+    setTouched(Object.fromEntries(Object.keys(PERSONAL_SPECS).map((key) => [key, true])));
+
+  /** Défaut d'un champ, une fois quitté (ou signalé par le serveur) seulement. */
+  const fieldError = (specs: Record<string, Spec>, key: string, value: string) =>
+    touched[key] || refusedFields.includes(key) ? specProblem(specs, key, value, tr.census.check) : null;
+
+  const personalError = (key: keyof CensusDraft['personal']) =>
+    fieldError(PERSONAL_SPECS, key, draft?.personal[key] ?? '');
+
+  /** Sortie d'un compteur : la valeur est d'abord remise au format que le serveur lit. */
+  function leaveCount(key: 'children_under_6' | 'total_children') {
+    if (draft) updatePersonal(key, normalizeCount(draft.personal[key]));
+    markTouched(key);
+  }
+
+  /**
+   * Les règles du serveur, relues d'un bloc. Au récapitulatif, les champs ne sont plus
+   * à l'écran : c'est là qu'il faut quand même les nommer, avant que l'envoi part pour
+   * un refus que cet écran connaissait déjà.
+   */
+  const pending = useMemo(() => {
+    if (!draft) return [] as { stage: DraftStage; text: string }[];
+    const t = tr.census.check;
+    const rows: { stage: DraftStage; text: string }[] = [];
+
+    for (const p of problemsOf(PERSONAL_SPECS, draft.personal, t)) {
+      rows.push({ stage: FIELD_STAGES[p.key] ?? 'identity', text: p.message });
+    }
+    for (const p of problemsOf(CONTRACT_SPECS, draft.contract, t)) {
+      rows.push({ stage: 'pay', text: p.message });
+    }
+    for (const d of draft.dependents) {
+      if (d.removed) continue;
+      const who = dependentWho(d, tr);
+      for (const p of problemsOf(DEPENDENT_SPECS, d, t)) {
+        rows.push({ stage: 'family', text: `${who} — ${p.message}` });
+      }
+    }
+    for (const di of draft.diplomas) {
+      if (di.removed) continue;
+      const what = diplomaTypeLabels[di.type];
+      for (const p of problemsOf(DIPLOMA_SPECS, di, t)) {
+        rows.push({ stage: 'family', text: `${what} — ${p.message}` });
+      }
+    }
+
+    return rows;
+  }, [draft, tr, diplomaTypeLabels]);
+
   function patchOrganizational(patch: Partial<CensusDraft['organizational']>) {
     setDraft((d) => (d ? { ...d, organizational: { ...d.organizational, ...patch } } : d));
   }
@@ -499,6 +612,32 @@ export default function CensusPage() {
       return;
     }
 
+    if (pending.length > 0) {
+      // Rien n'est envoyé : le formulaire connaît les règles du serveur, et laisser
+      // partir la requête produirait le refus en bloc que l'employé subit aujourd'hui.
+      // Les champs sont repris un à un, à leur place, là où il peut les corriger.
+      revealAll();
+      window.scrollTo({ top: 0 });
+      return;
+    }
+
+    const files = attachedFiles(draft);
+    if (unsendableFiles(files)) {
+      // Le récapitulatif l'annonce déjà, avant ce clic. Laisser partir quand même, c'est
+      // le serveur qui répond à côté : « formulaire arrivé vide » quand le corps dépasse
+      // `post_max_size`, « pièces manquantes » en accusant `max_file_uploads` quand PHP a
+      // jeté une pièce trop grosse. Deux phrases où l'employé n'a rien à reprendre.
+      alert(
+        tr.census.file.tooHeavy(
+          heaviestLabel(files, tr),
+          fileSizeLabel(totalBytes(files), tr.uploads.units),
+          fileSizeLabel(MAX_TOTAL_UPLOAD_BYTES, tr.uploads.units),
+          fileSizeLabel(MAX_UPLOAD_BYTES, tr.uploads.units),
+        ),
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await submitCensus(current.campaign.id, draft, bankChangeAck);
@@ -527,7 +666,18 @@ export default function CensusPage() {
         setRefusedProblems(Object.values(refused).flat());
         setRefusedFields(serverErrorFields(refused));
         setStage(serverErrorStage(keys[0]));
+        setTouched(Object.fromEntries(serverErrorFields(refused).map((key) => [key, true])));
         window.scrollTo({ top: 0 });
+      } else if (isNetworkError(error)) {
+        // Toujours aucune réponse, avec un poids que l'écran avait pourtant accepté : le
+        // lien a lâché en plein transfert, ou le `php.ini` du serveur est plus bas que la
+        // marge annoncée ici. Le dire, c'est lui éviter d'aller redémarrer la box du
+        // service en cherchant la ligne.
+        alert(
+          files.length
+            ? tr.census.alerts.sendCut(files.length, fileSizeLabel(totalBytes(files), tr.uploads.units))
+            : apiError.message,
+        );
       } else {
         alert(apiError.message);
       }
@@ -618,11 +768,48 @@ export default function CensusPage() {
   if (stage === 'review') {
     const activeDependents = draft.dependents.filter((d) => !d.removed);
     const activeDiplomas = draft.diplomas.filter((d) => !d.removed);
+    const files = attachedFiles(draft);
+    const weight = totalBytes(files);
 
     return (
       <div className="max-w-2xl mx-auto p-4 sm:p-8">
         <h1 className="text-lg font-bold text-accent mb-1">{tr.census.stages.review}</h1>
         <p className="text-sm text-gray-500 mb-4">{tr.census.screens.reviewIntro}</p>
+
+        {pending.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+            <p className="font-semibold text-sm text-amber-900">
+              {pending.length === 1 ? tr.census.check.todoOne : tr.census.check.todoMany(pending.length)}
+            </p>
+            <ul className="mt-2 space-y-1">
+              {pending.map((row, i) => (
+                <li key={`${row.stage}-${i}`} className="text-xs text-amber-900 leading-relaxed">
+                  <button
+                    onClick={() => {
+                      revealAll();
+                      goTo(row.stage);
+                    }}
+                    title={tr.census.check.todoJump}
+                    className="text-left hover:underline"
+                  >
+                    • {row.text} <span className="text-amber-700/70">→ {tr.census.stages[row.stage]}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {unsendableFiles(files) && (
+          <p className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-xs text-red-700 leading-relaxed">
+            {tr.census.file.tooHeavy(
+              heaviestLabel(files, tr),
+              fileSizeLabel(weight, tr.uploads.units),
+              fileSizeLabel(MAX_TOTAL_UPLOAD_BYTES, tr.uploads.units),
+              fileSizeLabel(MAX_UPLOAD_BYTES, tr.uploads.units),
+            )}
+          </p>
+        )}
 
         {draft.photo && (
           <div className="flex justify-center mb-4">
@@ -896,12 +1083,16 @@ export default function CensusPage() {
             label={tr.census.fields.matriculeFp}
             value={draft.personal.matricule_fonction_publique}
             onChange={(v) => updatePersonal('matricule_fonction_publique', v)}
-            onBlur={() => updatePersonal('matricule_fonction_publique', draft.personal.matricule_fonction_publique.trim())}
+            onBlur={() => {
+              updatePersonal('matricule_fonction_publique', draft.personal.matricule_fonction_publique.trim());
+              markTouched('matricule_fonction_publique');
+            }}
             flagged={flaggedFields.has('matricule_fonction_publique')}
+            error={personalError('matricule_fonction_publique')}
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label={tr.census.fields.lastName} value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} flagged={flaggedFields.has('last_name')} />
-            <Field label={tr.census.fields.firstName} value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} flagged={flaggedFields.has('first_name')} />
+            <Field label={tr.census.fields.lastName} value={draft.personal.last_name} onChange={(v) => updatePersonal('last_name', v)} onBlur={() => markTouched('last_name')} flagged={flaggedFields.has('last_name')} error={personalError('last_name')} />
+            <Field label={tr.census.fields.firstName} value={draft.personal.first_name} onChange={(v) => updatePersonal('first_name', v)} onBlur={() => markTouched('first_name')} flagged={flaggedFields.has('first_name')} error={personalError('first_name')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SelectField
@@ -935,12 +1126,14 @@ export default function CensusPage() {
               label={tr.census.fields.idCard}
               value={draft.personal.id_card_number}
               onChange={(v) => updatePersonal('id_card_number', v)}
+              onBlur={() => markTouched('id_card_number')}
               flagged={flaggedFields.has('id_card_number')}
+              error={personalError('id_card_number')}
             />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label={tr.census.fields.childrenUnder6} value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} type="number" flagged={flaggedFields.has('children_under_6')} />
-            <Field label={tr.census.fields.totalChildren} value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} type="number" flagged={flaggedFields.has('total_children')} />
+            <Field label={tr.census.fields.childrenUnder6} value={draft.personal.children_under_6} onChange={(v) => updatePersonal('children_under_6', v)} onBlur={() => leaveCount('children_under_6')} type="number" flagged={flaggedFields.has('children_under_6')} error={personalError('children_under_6')} />
+            <Field label={tr.census.fields.totalChildren} value={draft.personal.total_children} onChange={(v) => updatePersonal('total_children', v)} onBlur={() => leaveCount('total_children')} type="number" flagged={flaggedFields.has('total_children')} error={personalError('total_children')} />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateInput
@@ -956,10 +1149,10 @@ export default function CensusPage() {
               flagged={flaggedFields.has('service_start_date')}
             />
           </div>
-          <Field label={tr.census.fields.phone} value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} flagged={flaggedFields.has('phone')} />
-          <Field label={tr.census.fields.email} value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} flagged={flaggedFields.has('email')} />
-          <Field label={tr.census.fields.address} value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} flagged={flaggedFields.has('address')} />
-          <Field label={tr.census.fields.city} value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} flagged={flaggedFields.has('city')} />
+          <Field label={tr.census.fields.phone} value={draft.personal.phone} onChange={(v) => updatePersonal('phone', v)} onBlur={() => markTouched('phone')} flagged={flaggedFields.has('phone')} error={personalError('phone')} />
+          <Field label={tr.census.fields.email} value={draft.personal.email} onChange={(v) => updatePersonal('email', v)} onBlur={() => markTouched('email')} flagged={flaggedFields.has('email')} error={personalError('email')} />
+          <Field label={tr.census.fields.address} value={draft.personal.address} onChange={(v) => updatePersonal('address', v)} onBlur={() => markTouched('address')} flagged={flaggedFields.has('address')} error={personalError('address')} />
+          <Field label={tr.census.fields.city} value={draft.personal.city} onChange={(v) => updatePersonal('city', v)} onBlur={() => markTouched('city')} flagged={flaggedFields.has('city')} error={personalError('city')} />
         </div>
       </Section>
 
@@ -1012,9 +1205,13 @@ export default function CensusPage() {
               label={tr.census.fields.contractNumber}
               value={draft.contract.contract_number}
               onChange={(v) => patchContract({ contract_number: v })}
-              onBlur={() => patchContract({ contract_number: draft.contract.contract_number.trim() })}
+              onBlur={() => {
+                patchContract({ contract_number: draft.contract.contract_number.trim() });
+                markTouched('contract_number');
+              }}
               placeholder={tr.census.fields.contractNumberPlaceholder}
               flagged={flaggedFields.has('contract_number')}
+              error={fieldError(CONTRACT_SPECS, 'contract_number', draft.contract.contract_number)}
             />
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.census.fields.contractType}</label>
@@ -1063,19 +1260,25 @@ export default function CensusPage() {
             label={tr.census.fields.bankName}
             value={draft.personal.bank_name}
             onChange={(v) => updatePersonal('bank_name', v)}
+            onBlur={() => markTouched('bank_name')}
             flagged={flaggedFields.has('bank_name')}
+            error={personalError('bank_name')}
           />
           <Field
             label={tr.census.fields.bankAccount}
             value={draft.personal.bank_account_number}
             onChange={(v) => updatePersonal('bank_account_number', v)}
+            onBlur={() => markTouched('bank_account_number')}
             flagged={flaggedFields.has('bank_account_number')}
+            error={personalError('bank_account_number')}
           />
           <Field
             label={tr.census.fields.cnps}
             value={draft.personal.cnps_number}
             onChange={(v) => updatePersonal('cnps_number', v)}
+            onBlur={() => markTouched('cnps_number')}
             flagged={flaggedFields.has('cnps_number')}
+            error={personalError('cnps_number')}
           />
 
           {bankChanges.length > 0 && (
@@ -1493,6 +1696,7 @@ function Field({
   placeholder,
   type = 'text',
   flagged = false,
+  error = null,
 }: {
   label: string;
   value: string;
@@ -1501,6 +1705,8 @@ function Field({
   placeholder?: string;
   type?: string;
   flagged?: boolean;
+  /** Défaut de format constaté à la saisie (src/lib/fieldRules.ts). */
+  error?: string | null;
 }) {
   return (
     <div>
@@ -1511,9 +1717,16 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className={flagged ? FLAGGED_CLASS : FIELD_CLASS}
+        aria-invalid={error ? true : undefined}
+        className={error || flagged ? FLAGGED_CLASS : FIELD_CLASS}
       />
-      {flagged && <CorrectionNote />}
+      {/* Un défaut de format et un renvoi des RH ne sont pas la même nouvelle : le premier
+          se corrige tout de suite, le second s'explique par la raison du renvoi. */}
+      {error ? (
+        <p className="text-xs font-medium text-red-600 mt-1">{error}</p>
+      ) : (
+        flagged && <CorrectionNote />
+      )}
     </div>
   );
 }
@@ -1588,6 +1801,11 @@ function DependentModal({
 }) {
   const { tr } = useLang();
   const [item, setItem] = useState<CensusDraftDependent>(initial);
+  // Un champ de ligne ne se reprend qu'après y être passé (ou après une tentative
+  // d'enregistrement) : une ligne vide n'est pas encore une faute.
+  const [seen, setSeen] = useState<Record<string, boolean>>({});
+  const err = (key: string, value: string) =>
+    seen[key] ? specProblem(DEPENDENT_SPECS, key, value, tr.census.check) : null;
   const isParent = PARENT_RELATIONS.includes(item.relationship);
   // Un parent n'a pas besoin de sa propre pièce si l'acte familial est déjà là.
   const actCovered = isParent && familyActAvailable && !isAttached(item.documents.birth_certificate);
@@ -1600,6 +1818,7 @@ function DependentModal({
   }
 
   function handleSave() {
+    setSeen(Object.fromEntries(Object.keys(DEPENDENT_SPECS).map((key) => [key, true])));
     if (!item.last_name.trim() || !item.birth_date.trim()) {
       alert(tr.dependents.errors.nameAndBirthDate);
       return;
@@ -1640,8 +1859,8 @@ function DependentModal({
             ))}
           </div>
         </div>
-        <Field label={tr.dependents.lastName} value={item.last_name} onChange={(v) => setItem((p) => ({ ...p, last_name: v }))} />
-        <Field label={tr.dependents.firstName} value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} />
+        <Field label={tr.dependents.lastName} value={item.last_name} onChange={(v) => setItem((p) => ({ ...p, last_name: v }))} onBlur={() => setSeen((s) => ({ ...s, last_name: true }))} error={err('last_name', item.last_name)} />
+        <Field label={tr.dependents.firstName} value={item.first_name} onChange={(v) => setItem((p) => ({ ...p, first_name: v }))} onBlur={() => setSeen((s) => ({ ...s, first_name: true }))} error={err('first_name', item.first_name)} />
         <DateInput label={tr.dependents.birthDate} value={item.birth_date} onChange={(v) => setItem((p) => ({ ...p, birth_date: v }))} />
         <div>
           <label className="block text-xs font-semibold text-gray-500 mb-1">{tr.dependents.genderField}</label>
@@ -1697,8 +1916,13 @@ function DiplomaModal({
 }) {
   const { tr } = useLang();
   const [item, setItem] = useState<CensusDraftDiploma>(initial);
+  const [seen, setSeen] = useState<Record<string, boolean>>({});
+  const err = (key: string, value: string) =>
+    seen[key] ? specProblem(DIPLOMA_SPECS, key, value, tr.census.check) : null;
+  const leave = (key: string) => () => setSeen((s) => ({ ...s, [key]: true }));
 
   function handleSave() {
+    setSeen(Object.fromEntries(Object.keys(DIPLOMA_SPECS).map((key) => [key, true])));
     const year = parseInt(item.year_obtained.trim(), 10);
     if (!item.title.trim() || !item.institution.trim()) {
       alert(tr.diplomas.errors.titleAndInstitution);
@@ -1732,9 +1956,9 @@ function DiplomaModal({
             ))}
           </div>
         </div>
-        <Field label={tr.diplomas.titleField} value={item.title} onChange={(v) => setItem((p) => ({ ...p, title: v }))} />
-        <Field label={tr.census.fields.institution} value={item.institution} onChange={(v) => setItem((p) => ({ ...p, institution: v }))} />
-        <Field label={tr.census.fields.year} value={item.year_obtained} onChange={(v) => setItem((p) => ({ ...p, year_obtained: v }))} type="number" />
+        <Field label={tr.diplomas.titleField} value={item.title} onChange={(v) => setItem((p) => ({ ...p, title: v }))} onBlur={leave('title')} error={err('title', item.title)} />
+        <Field label={tr.census.fields.institution} value={item.institution} onChange={(v) => setItem((p) => ({ ...p, institution: v }))} onBlur={leave('institution')} error={err('institution', item.institution)} />
+        <Field label={tr.census.fields.year} value={item.year_obtained} onChange={(v) => setItem((p) => ({ ...p, year_obtained: v }))} onBlur={leave('year_obtained')} type="number" error={err('year_obtained', item.year_obtained)} />
 
         <FileField
           label={`${tr.census.fields.documentField} ${item.existing_id ? tr.census.modals.suffixIfChanged : tr.census.modals.suffixRequired}`}

@@ -384,6 +384,27 @@ export const fr = {
                 'Reprends la photo, ou choisis un autre fichier.',
             emptyPick: (name: string) => `⚠️ ${name} est vide : sélectionne-le à nouveau.`,
             attached: (name: string, size: string) => `✅ ${name} · ${size}`,
+            // Le poids que le serveur transporte dans une seule requête : ni la règle du
+            // validateur ni le réseau ne le diront à l'employé, c'est l'envoi qui meurt
+            // sans réponse. Les pièces fautives sont nommées, il sait lesquelles reprendre.
+            tooHeavy: (names: string, total: string, max: string, pieceMax: string) =>
+                `${names} : ${total} à envoyer ensemble. Un envoi est limité à ${max}, une pièce à ${pieceMax}. ` +
+                'Le serveur ne lirait pas ça du tout — et ne répondrait pas. Reprends les plus lourdes : ' +
+                'rien n’est envoyé pour l’instant, ton brouillon est gardé.',
+        },
+        // Le miroir navigateur des règles du serveur (src/lib/fieldRules.ts) : ces phrases
+        // sont dites champ par champ, pendant la saisie, au lieu d'arriver d'un bloc à la
+        // soumission.
+        check: {
+            wholeNumber: 'Écris un nombre entier, sans lettre ni zéro au début : 1, pas 01.',
+            atLeast: (min: number) => `Ce nombre doit être d’au moins ${min}.`,
+            year: (min: number, max: number) => `Une année à 4 chiffres, entre ${min} et ${max}.`,
+            email: 'Cette adresse email ne semble pas valide : vérifie le « @ » et le nom du domaine.',
+            tooLong: (n: number, max: number) => `Trop long : ${n} caractères pour une limite de ${max}.`,
+            required: 'Ce champ est obligatoire.',
+            todoOne: 'Un point à corriger avant l’envoi :',
+            todoMany: (n: number) => `${n} points à corriger avant l’envoi :`,
+            todoJump: 'Ouvrir cette étape',
         },
         stages: {
             identity: 'Identité',
@@ -599,6 +620,16 @@ export const fr = {
             bankChanges: (names: string, section: string) =>
                 `Tu as modifié ${names}. Coche la reconnaissance de l'avertissement dans la section « ${section} » ` +
                 'avant de vérifier et soumettre.',
+            // Le serveur n'a rien répondu : soit le réseau a lâché en cours de transfert,
+            // soit les pièces pesaient plus que ce que le serveur accepte de lire. Le
+            // formulaire refuse déjà ce poids (census.file.tooHeavy) — mais sa marge est
+            // celle du php.ini d'ici. Ailleurs, un volume qu'il laisse passer peut quand
+            // même mourir en route : les deux causes restent à dire.
+            sendCut: (count: number, total: string) =>
+                `L'envoi n'est pas arrivé au bout : ${count} pièce${count > 1 ? 's' : ''} jointe${count > 1 ? 's' : ''} ` +
+                `partent avec le formulaire (${total} au total) et aucune réponse du serveur n'est revenue. Soit la ` +
+                'connexion a été coupée pendant le transfert, soit ces pièces sont trop lourdes pour lui : reprends ' +
+                'les plus grosses, plus légères, et relance — ton brouillon est gardé, rien n’est perdu.',
         },
     },
     profile: {

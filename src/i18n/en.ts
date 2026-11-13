@@ -388,6 +388,27 @@ export const en: Dict = {
                 'Take the photo again, or choose another file.',
             emptyPick: (name: string) => `⚠️ ${name} is empty: select it again.`,
             attached: (name: string, size: string) => `✅ ${name} · ${size}`,
+            // The weight one request can carry: neither the validation rule nor the network
+            // would tell the employee — the send simply dies without an answer. The offending
+            // files are named so it is clear which ones to redo.
+            tooHeavy: (names: string, total: string, max: string, pieceMax: string) =>
+                `${names}: ${total} to send together. One send is limited to ${max}, one file to ${pieceMax}. ` +
+                'The server would not read that at all — and would not answer. Redo the heaviest ones: ' +
+                'nothing is sent for now, your draft is kept.',
+        },
+        // Browser-side mirror of the server rules (src/lib/fieldRules.ts): these lines are
+        // spoken field by field while the employee types, instead of arriving as one block
+        // at submission time.
+        check: {
+            wholeNumber: 'Write a whole number, with no letter and no leading zero: 1, not 01.',
+            atLeast: (min: number) => `This number must be at least ${min}.`,
+            year: (min: number, max: number) => `A 4-digit year, between ${min} and ${max}.`,
+            email: 'This email address does not look valid: check the “@” and the domain name.',
+            tooLong: (n: number, max: number) => `Too long: ${n} characters against a limit of ${max}.`,
+            required: 'This field is required.',
+            todoOne: 'One point to fix before sending:',
+            todoMany: (n: number) => `${n} points to fix before sending:`,
+            todoJump: 'Open this step',
         },
         stages: {
             identity: 'Identity',
@@ -607,6 +628,16 @@ export const en: Dict = {
             bankChanges: (names: string, section: string) =>
                 `You changed ${names}. Tick the acknowledgement of the warning in the “${section}” section before ` +
                 'you review and submit.',
+            // The server answered nothing: either the link dropped mid-transfer, or the
+            // attachments weighed more than the server is willing to read. The form already
+            // refuses that weight (census.file.tooHeavy) — but its margin is this machine's
+            // php.ini: elsewhere, a volume let through here can still die in transit, so both
+            // causes stay worth naming.
+            sendCut: (count: number, total: string) =>
+                `The upload did not finish: ${count} attached document${count > 1 ? 's' : ''} travel ` +
+                `with the form (${total} altogether) and no answer came back from the server. Either the connection ` +
+                'was cut during the transfer, or those documents are too heavy for it: take the largest ones again, ' +
+                'lighter, and send once more — your draft is kept, nothing is lost.',
         },
     },
     profile: {

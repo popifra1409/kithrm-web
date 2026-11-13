@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { fetchAppInfo } from '../api/appInfo';
 import type { AppInfo } from '../api/appInfo';
-import { fileUrl } from '../lib/fileUrl';
+import { loadableFileUrl } from '../lib/fileUrl';
 
 interface AppInfoContextValue {
     appInfo: AppInfo | null;
@@ -22,7 +22,13 @@ export function AppInfoProvider({ children }: { children: React.ReactNode }) {
 
                 // L'icône de l'onglet doit suivre le logo des « Infos de la structure » :
                 // le <link> de index.html n'est qu'un repli tant que l'API n'a pas répondu.
-                const iconUrl = fileUrl(data.favicon_url ?? data.logo_url);
+                //
+                // Il n'est remplacé qu'après preuve que le fichier se charge. Un <link> posé
+                // sur une adresse morte laisse l'ancienne icône du dépôt en place sans que
+                // rien ne le signale nulle part — c'est exactement le « favicon resté inchangé »
+                // que la page ne pouvait pas expliquer. Le favicon de la structure est optionnel :
+                // on retombe sur le logo, puis sur l'icône livrée avec le front.
+                const iconUrl = (await loadableFileUrl(data.favicon_url)) ?? (await loadableFileUrl(data.logo_url));
 
                 if (iconUrl) {
                     let link = document.querySelector<HTMLLinkElement>("link[rel~='icon']");

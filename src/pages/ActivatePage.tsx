@@ -7,8 +7,8 @@ import { useLang } from '../context/LangContext';
 import { startActivation, refreshActivationCaptcha, requestActivationReview } from '../api/auth';
 import type { ActivationCaptcha } from '../api/auth';
 import { extractApiError } from '../api/client';
-import { fileUrl } from '../lib/fileUrl';
 import LanguageSwitcher from '../components/LanguageSwitcher';
+import StructureLogo from '../components/StructureLogo';
 import DateInput from '../components/DateInput';
 
 type Step = 'credentials' | 'verification' | 'review_requested';
@@ -280,13 +280,7 @@ export default function ActivatePage() {
         </div>
 
         <div className="text-center mb-6">
-          {appInfo?.logo_url ? (
-            <img src={fileUrl(appInfo.logo_url) ?? undefined} alt="" className="w-14 h-14 mx-auto mb-3 object-contain" />
-          ) : (
-            <div className="w-14 h-14 rounded-2xl bg-primary mx-auto flex items-center justify-center mb-3">
-              <span className="text-white text-xl font-bold">{(appInfo?.hospital_short_name ?? 'H').charAt(0)}</span>
-            </div>
-          )}
+          <StructureLogo logoUrl={appInfo?.logo_url} shortName={appInfo?.hospital_short_name} size="sm" />
 
           {step === 'credentials' && (
             <>
