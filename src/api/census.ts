@@ -70,7 +70,9 @@ export interface OrganizationOptions {
   trade_bodies: { id: number; name: string }[];
   qualifications: { id: number; name: string; trade_body_id: number }[];
   job_titles: { id: number; name: string; hierarchy_level: number | null }[];
-  personnel_types: { value: string; label: string }[];
+  // description : « à qui cela correspond », envoyé par l'API pour que l'employé
+  // se range lui-même au lieu de deviner ce que veut dire une catégorie.
+  personnel_types: { value: string; label: string; description?: string }[];
   administrative_statuses: { value: string; label: string }[];
 }
 

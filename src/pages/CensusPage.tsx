@@ -5,7 +5,7 @@ import {
   submitCensus,
   buildInitialDraft,
 } from '../api/census';
-import type { CensusDraft, CensusCurrentResponse, CensusDraftDependent, CensusDraftDiploma } from '../api/census';
+import type { CensusDraft, CensusCurrentResponse, CensusDraftDependent, CensusDraftDiploma, OrganizationOptions } from '../api/census';
 import { extractApiError, isNetworkError } from '../api/client';
 import PhotoCaptureInput from '../components/PhotoCaptureInput';
 import DateInput from '../components/DateInput';
@@ -21,7 +21,7 @@ import {
   uploadHint,
   uploadRefusal,
 } from '../lib/uploads';
-import { computeCascade } from '../lib/organization';
+import { chainOfService, computeCascade, serviceOfSector, withDeclaredPersonnelType } from '../lib/organization';
 import {
   CONTRACT_SPECS,
   DEPENDENT_SPECS,
@@ -425,6 +425,39 @@ export default function CensusPage() {
     [orgOptions, draft?.organizational, tr]
   );
 
+  /** Un service choisi : la branche et les niveaux au-dessus en découlent, plus à saisir. */
+  const fromService = !!draft?.organizational.service_id;
+
+  /**
+   * Une déclaration d'avant la nouvelle nomenclature porte parfois une catégorie
+   * qui n'est plus proposée : elle reste dans la liste, étiquetée, sinon le menu
+   * a l'air vide alors que la valeur est prise en compte.
+   */
+  const personnelTypeChoices = useMemo(
+    () =>
+      orgOptions
+        ? withDeclaredPersonnelType(
+            orgOptions.personnel_types,
+            draft?.organizational.personnel_type ?? '',
+            tr.org.outOfNomenclature
+          )
+        : [],
+    [orgOptions, draft?.organizational.personnel_type, tr]
+  );
+
+  /**
+   * Sans service choisi, les unités sont proposées avec le nom de leur service :
+   * celle qui ne dit rien toute seule devient reconnaissable.
+   */
+  const toSectorOptions = (list: OrganizationOptions['sectors']) =>
+    list.map((sector) => {
+      const service = orgOptions?.services.find((s) => s.id === sector.service_id);
+      return {
+        value: String(sector.id),
+        label: fromService || !service ? sector.name : `${sector.name} — ${service.name}`,
+      };
+    });
+
   function updatePersonal(field: keyof CensusDraft['personal'], value: string) {
     setDraft((d) => (d ? { ...d, personal: { ...d.personal, [field]: value } } : d));
   }
@@ -490,7 +523,7 @@ export default function CensusPage() {
     setDraft((d) => (d ? { ...d, contract: { ...d.contract, ...patch } } : d));
   }
 
-  // Chaque changement remet à vide les niveaux situés en dessous.
+  // Un choix d'appartenance remet à vide les niveaux situés en dessous.
   const setBranch = (v: string) =>
     patchOrganizational({ branch_type: v, direction_id: '', department_id: '', sub_direction_id: '', service_id: '', sector_id: '' });
   const setDirection = (v: string) =>
@@ -506,7 +539,32 @@ export default function CensusPage() {
     });
   };
   const setSubDirection = (v: string) => patchOrganizational({ sub_direction_id: v, service_id: '', sector_id: '' });
-  const setService = (v: string) => patchOrganizational({ service_id: v, sector_id: '' });
+
+  /**
+   * Le service est l'ancre de la chaîne : le choisir remplit la branche, le
+   * département ou la sous-direction, et la direction. Le retirer laisse ces niveaux
+   * tels quels mais editables, sauf l'unité qui ne se définit que par son service.
+   */
+  const setService = (v: string) => {
+    const chain = v && orgOptions ? chainOfService(orgOptions, Number(v)) : null;
+    patchOrganizational(chain ? { ...chain, sector_id: '' } : { service_id: v, sector_id: '' });
+  };
+
+  /**
+   * Remonter la chaîne depuis l'unité seulement : pour l'employé qui ne connaît que
+   * son unité, c'est elle qui devient l'ancre. Une unité dont le service n'est plus
+   * dans la liste ne remplit rien : elle reste choisie, le service se saisira à côté.
+   */
+  const setSector = (v: string) => {
+    if (!v || !orgOptions) {
+      patchOrganizational({ sector_id: v });
+      return;
+    }
+    const serviceId = serviceOfSector(orgOptions, Number(v));
+    const chain = serviceId !== null ? chainOfService(orgOptions, serviceId) : null;
+    patchOrganizational(chain ? { ...chain, sector_id: v } : { sector_id: v });
+  };
+
   const setTradeBody = (v: string) => patchOrganizational({ trade_body_id: v, qualification_id: '' });
 
   function toggleRemoveDependent(index: number) {
@@ -860,7 +918,14 @@ export default function CensusPage() {
         </Section>
 
         <Section title={tr.census.sections.organization}>
-          <RecapRow label={tr.census.fields.branch} value={draft.organizational.branch_type === 'administrative' ? tr.census.branchNames.administrative : tr.census.branchNames.medical} />
+          <RecapRow
+            label={tr.census.fields.branch}
+            value={draft.organizational.branch_type === 'administrative'
+              ? tr.census.branchNames.administrative
+              : draft.organizational.branch_type === 'medical'
+                ? tr.census.branchNames.medical
+                : ''}
+          />
           <RecapRow label={tr.census.fields.direction} value={nameOf(orgOptions?.directions, draft.organizational.direction_id)} />
           {draft.organizational.branch_type === 'administrative' ? (
             <RecapRow label={tr.census.fields.subDirection} value={nameOf(orgOptions?.sub_directions, draft.organizational.sub_direction_id)} />
@@ -874,7 +939,7 @@ export default function CensusPage() {
           <RecapRow label={tr.census.fields.jobTitle} value={nameOf(orgOptions?.job_titles, draft.organizational.job_title_id)} />
           <RecapRow
             label={tr.census.fields.personnelType}
-            value={orgOptions?.personnel_types.find((t) => t.value === draft.organizational.personnel_type)?.label ?? ''}
+            value={personnelTypeChoices.find((t) => t.value === draft.organizational.personnel_type)?.label ?? ''}
           />
           <RecapRow
             label={tr.census.fields.administrativeStatus}
@@ -1336,20 +1401,28 @@ export default function CensusPage() {
         <p className="text-xs text-gray-500 mb-3">{tr.census.notes.orgIntro}</p>
 
         <div className="flex gap-2 mb-4">
-          {(['medical', 'administrative'] as const).map((b) => (
+          {(['medical', 'administrative', ''] as const).map((b) => (
             <button
               type="button"
-              key={b}
+              key={b || 'auto'}
               onClick={() => setBranch(b)}
               className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold border ${draft.organizational.branch_type === b
                   ? 'bg-primary text-white border-accent'
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
                 }`}
             >
-              {b === 'medical' ? tr.census.branchButtons.medical : tr.census.branchButtons.administrative}
+              {b === 'medical'
+                ? tr.census.branchButtons.medical
+                : b === 'administrative'
+                  ? tr.census.branchButtons.administrative
+                  : tr.census.branchButtons.unknown}
             </button>
           ))}
         </div>
+
+        {draft.organizational.branch_type === '' && (
+          <p className="text-xs text-gray-500 mb-3">{tr.census.hints.autoBranch}</p>
+        )}
 
         {flaggedFields.has('declared_branch_type') && (
           <div className="-mt-2 mb-3">
@@ -1364,26 +1437,34 @@ export default function CensusPage() {
               value={draft.organizational.direction_id}
               onChange={setDirection}
               options={toOptions(cascade.directions)}
-              hint={tr.census.hints.direction}
+              hint={fromService
+                ? tr.census.hints.foundAutomatically
+                : draft.organizational.branch_type === ''
+                  ? tr.census.hints.directionNeedsBranch
+                  : tr.census.hints.direction}
+              disabled={fromService || draft.organizational.branch_type === ''}
               flagged={flaggedFields.has('declared_direction_id')}
             />
 
-            {draft.organizational.branch_type === 'medical' ? (
+            {draft.organizational.branch_type === 'medical' && (
               <SelectField
                 label={tr.census.fields.department}
                 value={draft.organizational.department_id}
                 onChange={setDepartment}
                 options={toOptions(cascade.departments)}
-                hint={tr.census.hints.narrowsServices}
+                hint={fromService ? tr.census.hints.foundAutomatically : tr.census.hints.narrowsServices}
+                disabled={fromService}
                 flagged={flaggedFields.has('declared_department_id')}
               />
-            ) : (
+            )}
+            {draft.organizational.branch_type === 'administrative' && (
               <SelectField
                 label={tr.census.fields.subDirection}
                 value={draft.organizational.sub_direction_id}
                 onChange={setSubDirection}
                 options={toOptions(cascade.subDirections)}
-                hint={tr.census.hints.narrowsServices}
+                hint={fromService ? tr.census.hints.foundAutomatically : tr.census.hints.narrowsServices}
+                disabled={fromService}
                 flagged={flaggedFields.has('declared_sub_direction_id')}
               />
             )}
@@ -1393,21 +1474,23 @@ export default function CensusPage() {
               value={draft.organizational.service_id}
               onChange={setService}
               options={toOptions(cascade.services)}
+              hint={draft.organizational.sector_id && !fromService
+                ? tr.census.hints.sectorNeedsService
+                : draft.organizational.branch_type === ''
+                  ? tr.census.hints.servicesOfBothBranches
+                  : undefined}
               flagged={flaggedFields.has('declared_service_id')}
             />
 
             <SelectField
               label={tr.census.fields.sectorUnit}
               value={draft.organizational.sector_id}
-              onChange={(v) => patchOrganizational({ sector_id: v })}
-              options={toOptions(cascade.sectors)}
-              disabled={!draft.organizational.service_id}
+              onChange={setSector}
+              options={toSectorOptions(cascade.sectors)}
               flagged={flaggedFields.has('declared_sector_id')}
-              hint={!draft.organizational.service_id
-                ? tr.census.hints.chooseServiceFirst
-                : cascade.sectors.length === 0
-                  ? tr.census.hints.noSector
-                  : tr.census.hints.sectorOptional}
+              hint={draft.organizational.service_id && cascade.sectors.length === 0
+                ? tr.census.hints.noSector
+                : tr.census.hints.sectorOptional}
             />
 
             <div className="border-t border-gray-100 pt-3 space-y-3">
@@ -1442,7 +1525,8 @@ export default function CensusPage() {
                   label={tr.census.fields.personnelType}
                   value={draft.organizational.personnel_type}
                   onChange={(v) => patchOrganizational({ personnel_type: v })}
-                  options={orgOptions.personnel_types}
+                  options={personnelTypeChoices}
+                  hint={tr.census.hints.personnelTypeGuide}
                   flagged={flaggedFields.has('declared_personnel_type')}
                 />
                 <SelectField
@@ -1743,12 +1827,13 @@ function SelectField({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; description?: string }[];
   disabled?: boolean;
   hint?: string;
   flagged?: boolean;
 }) {
   const { tr } = useLang();
+  const chosen = options.find((o) => o.value === value);
   return (
     <div>
       <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
@@ -1764,14 +1849,20 @@ function SelectField({
       >
         <option value="">{disabled && hint ? hint : tr.census.labels.dash}</option>
         {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+          <option key={o.value} value={o.value} title={o.description}>{o.label}</option>
         ))}
       </select>
       {flagged ? (
         <CorrectionNote />
       ) : (
-        !disabled &&
-        hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>
+        // Désactivé mais rempli (niveau déduit), le hint n'est plus dans l'option vide :
+        // il doit quand même rester lisible sous la valeur.
+        hint && (!disabled || value !== '') && <p className="text-xs text-gray-400 mt-1">{hint}</p>
+      )}
+      {/* Le détail de l'option choisie suit la valeur, sinon l'aide ne sert qu'à
+          ceux qui ont déjà deviné. */}
+      {chosen?.description && (
+        <p className="text-xs text-gray-500 mt-1.5 leading-snug">{chosen.description}</p>
       )}
     </div>
   );

@@ -161,6 +161,7 @@ export const fr = {
     },
     org: {
         outOfHierarchy: (name: string) => `${name} (hors hiérarchie)`,
+        outOfNomenclature: (value: string) => `${value} (hors nomenclature, à reclasser)`,
     },
     censusLock: {
         cta: '📋 Déclarer pendant le recensement',
@@ -483,6 +484,7 @@ export const fr = {
         branchButtons: {
             medical: '🏥 Branche Médicale',
             administrative: '📋 Branche Administrative',
+            unknown: '🧭 Je ne sais pas',
         },
         branchNames: {
             medical: 'Médicale',
@@ -492,7 +494,15 @@ export const fr = {
             currentPhoto: 'Photo actuelle (laissez vide pour la conserver)',
             direction: 'Facultatif : restreint les listes suivantes',
             narrowsServices: 'Facultatif : restreint la liste des services',
-            chooseServiceFirst: "Choisissez d'abord un service",
+            autoBranch:
+                "Choisis seulement ton service ou ton unité : la branche, le département ou la sous-direction et la " +
+                'direction se remplissent tout seuls.',
+            servicesOfBothBranches: 'Les services des deux branches sont proposés.',
+            directionNeedsBranch: "Choisis d'abord un service ou une unité",
+            sectorNeedsService: 'Son service est introuvable : choisis-le toi-même dans la liste.',
+            foundAutomatically: 'Trouvé tout seul d’après ton service ou ton unité. Change le service pour le modifier.',
+            personnelTypeGuide:
+                'La liste de qui appartient à la catégorie s’affiche dès que tu as choisi : vérifie que tu t’es rangé au bon endroit.',
             noSector: 'Aucune unité / secteur rattachée à ce service',
             sectorOptional: 'Facultatif : unité ou secteur rattaché au service',
             chooseTradeBodyFirst: "Choisissez d'abord le corps de métier",
@@ -504,9 +514,9 @@ export const fr = {
             classificationCameroon: 'Nomenclature camerounaise (fonctionnaires). L’indice se calcule automatiquement.',
             classificationContract: 'Classification numérique (contractuels). L’indice se calcule automatiquement.',
             orgIntro:
-                'Chaque niveau facultatif (direction, département/sous-direction, unité) ne fait que restreindre la liste ' +
-                "suivante. Vérifiez bien l'ordre : Direction → Département ou Sous-direction → Service → Unité / Secteur. " +
-                'Les RH vérifient ces informations avant la validation finale.',
+                'Tu connais ton service ou ton unité ? Choisis-les : la branche, la direction et le département ou la ' +
+                "sous-direction se remplissent tout seuls. Tu peux aussi partir du haut : Direction → Département ou " +
+                'Sous-direction → Service → Unité / Secteur. Les RH vérifient ces informations avant la validation finale.',
         },
         bankChanges: {
             bank_name: 'nom de la banque',

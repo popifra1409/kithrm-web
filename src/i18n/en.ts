@@ -165,6 +165,7 @@ export const en: Dict = {
     },
     org: {
         outOfHierarchy: (name: string) => `${name} (outside the hierarchy)`,
+        outOfNomenclature: (value: string) => `${value} (outdated category, to reclassify)`,
     },
     censusLock: {
         cta: '📋 Declare it during the Recensement',
@@ -487,6 +488,7 @@ export const en: Dict = {
         branchButtons: {
             medical: '🏥 Medical Branch',
             administrative: '📋 Administrative Branch',
+            unknown: '🧭 Not sure',
         },
         branchNames: {
             medical: 'Medical',
@@ -496,7 +498,15 @@ export const en: Dict = {
             currentPhoto: 'Current photo (leave empty to keep it)',
             direction: 'Optional: narrows the lists below',
             narrowsServices: 'Optional: narrows the list of services',
-            chooseServiceFirst: 'Choose a service first',
+            autoBranch:
+                'Just pick your service or your unit: the branch, the department or sub-directorate and the ' +
+                'directorate fill themselves in.',
+            servicesOfBothBranches: 'Services of both branches are listed.',
+            directionNeedsBranch: 'Pick a service or a unit first',
+            sectorNeedsService: 'Its service could not be found: pick it yourself from the list.',
+            foundAutomatically: 'Found from your service or unit. Change the service to edit it.',
+            personnelTypeGuide:
+                'The list of who belongs to a category appears as soon as you choose one: check that you placed yourself in the right one.',
             noSector: 'No unit / sector attached to this service',
             sectorOptional: 'Optional: unit or sector attached to the service',
             chooseTradeBodyFirst: 'Choose the trade group first',
@@ -508,9 +518,10 @@ export const en: Dict = {
             classificationCameroon: 'Cameroonian scale (civil servants). The index is calculated automatically.',
             classificationContract: 'Numeric classification (contract staff). The index is calculated automatically.',
             orgIntro:
-                'Each optional level (directorate, department/sub-directorate, unit) only narrows the list that follows. ' +
-                'Check the order carefully: Directorate → Department or Sub-directorate → Service → Unit / Sector. ' +
-                'The HR Department verifies this information before the final validation.',
+                'Know your service or your unit? Pick them and the branch, the directorate and the department or ' +
+                'sub-directorate fill themselves in. You can also start from the top: Directorate → Department or ' +
+                'Sub-directorate → Service → Unit / Sector. The HR Department verifies this information before the ' +
+                'final validation.',
         },
         bankChanges: {
             bank_name: 'bank name',
